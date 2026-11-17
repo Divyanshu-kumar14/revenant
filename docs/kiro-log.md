@@ -162,3 +162,6 @@ ADR 0001 closed — 2026-11-18 · provider nim · model `nvidia/nemotron-3.5-sup
 
 ## 2026-11-18 — Ingest task 1: SQLite client and schema
 Built `src/db/{client.ts,schema.sql,types.ts}` (WAL, foreign_keys=ON, eight tables, idempotent migrate); test-first: `tests/unit/db.test.ts` 1 test failed on unresolved `@/db/client`, then passed; full suite 3 files / 7 tests; `pnpm typecheck` exit 0, `pnpm test` exit 0.
+
+## 2026-11-18 — Ingest task 2: typed query helpers
+Added `src/db/queries.ts` (`insertItem`, `findItemBySha`, `getItem`, `countRows` with table allowlist, append-only `writeAudit`); test-first: 5 new tests in `tests/unit/db.test.ts` failed on unresolved `@/db/queries`, then passed; suite 3 files / 12 tests; `pnpm typecheck` exit 0, `pnpm test` exit 0.
