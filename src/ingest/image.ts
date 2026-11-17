@@ -1,14 +1,5 @@
 import sharp from "sharp";
-
-export class IngestError extends Error {
-  constructor(
-    readonly code: "UNDECODABLE",
-    message: string,
-  ) {
-    super(message);
-    this.name = "IngestError";
-  }
-}
+import { IngestError } from "./errors";
 
 export type NormalizedImage = { bytes: Buffer; width: number; height: number; format: "jpeg" };
 
