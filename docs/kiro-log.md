@@ -139,3 +139,21 @@ Surface: IDE agent session · model gemini-3.8-flash · prompt v1 · 20 items ·
 2026-11-18 — Model default changed to gemini-2.5-flash (`.env.example`, `src/extract/provider.ts`); `pnpm typecheck` exit 0; `pnpm spike -- --limit=1 --model=gemini-2.5-flash` → 1 extracted, 0 failed, prompt v1, item spike-122036494, output `eval-runs/spike-20261117T213812Z.json`. One item only; no accuracy claim.
 
 2026-11-18 — NIM vision adapter added (`src/extract/nim.ts`, `--provider=gemini|nim` in `scripts/spike-accuracy.ts`). Model `nvidia/nemotron-3.5-super-vl-120b-a12b`, chosen 2026-11-18 from the live catalog `https://integrate.api.nvidia.com/v1/models` (the docs page `/nim/docs/models` lists older LLMs only and no vision section; "vl" in the id is the basis, image support not yet confirmed by a real call). `pnpm typecheck` exit 0. Stubbed-fetch check: request shape, Retry-After retry, NO_KEY, CONFIG and AUTH mapping behave. Real-key run: not done, `pnpm spike -- --provider=nim --limit=1` stopped with NO_KEY because no NVIDIA key is configured.
+
+NIM smoke test — 2026-11-18 · model `nvidia/nemotron-3.5-super-vl-120b-a12b` · prompt v1 · 1 extracted, 0 failed (item spike-122036494, 14582 ms) · `eval-runs/spike-20261117T215314Z.json` (records provider `nim`) · image input working: yes, the transcription contains postcard text ("PUBLISHED BY LOWMAN & HANFORD CO., SEATTLE") that is not in the reference title; correctness not scored.
+
+NIM gate run — 2026-11-18 · provider nim · model `nvidia/nemotron-3.5-super-vl-120b-a12b` · prompt v1 · 20 items · 15 extracted, 5 failed (3 SCHEMA, 2 PROVIDER "returned no text") · `eval-runs/spike-20261117T215437Z.json`. No score claimed; scoring is by hand in ADR 0001.
+
+## NIM reruns on the coerced adapter
+
+```
+spike-157695821: SCHEMA→PROVIDER no text (still failed)
+spike-124931365: SCHEMA→extracted, day 1909-08-25, conf 0.95
+spike-122041121: SCHEMA→extracted, day 1910-03-01, conf 0.90
+spike-127485595: PROVIDER-empty→extracted, display "1860", unknown, conf 0.00
+spike-157870943: PROVIDER-empty→extracted, unknown, conf 0.00
+```
+
+- Typecheck and test pass (2 files, 6 tests).
+- Coercion-vs-model-zero indistinguishable in output.
+- Model not repeatable run to run at temperature 0.
