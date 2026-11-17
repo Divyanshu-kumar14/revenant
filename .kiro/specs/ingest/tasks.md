@@ -2,7 +2,7 @@
 
 > Execute in order. Each task ends with `pnpm typecheck && pnpm test`, a ticked checkbox, one line in `docs/kiro-log.md`, and a commit.
 
-- [ ] 1. Create the SQLite client and schema (`src/db/client.ts`, `src/db/schema.sql`, `src/db/types.ts`): WAL, `foreign_keys=ON`, `items`, `extractions`, `records`, `entities`, `item_entities`, `places`, `audit_events`, `eval_runs`. Verify: a test opens `:memory:`, migrates twice, and a duplicate `sha256` insert throws.
+- [x] 1. Create the SQLite client and schema (`src/db/client.ts`, `src/db/schema.sql`, `src/db/types.ts`): WAL, `foreign_keys=ON`, `items`, `extractions`, `records`, `entities`, `item_entities`, `places`, `audit_events`, `eval_runs`. Verify: a test opens `:memory:`, migrates twice, and a duplicate `sha256` insert throws.
 - [ ] 2. Add typed query helpers (`src/db/queries.ts`): `insertItem`, `findItemBySha`, `getItem`, `countRows`, `writeAudit`. Verify: unit tests cover each helper and the audit before/after JSON.
 - [ ] 3. Implement `contentHash` (`src/ingest/hash.ts`) and a property test that it is deterministic and distinct for distinct byte arrays.
 - [ ] 4. Implement `normalizeImage` (`src/ingest/image.ts`) with EXIF rotation, 2048 px fit-inside, JPEG q88. Verify: a 12 MP rotated fixture is upright, orientation 1, and ≤ 2048 px; a 200 px image is not enlarged.

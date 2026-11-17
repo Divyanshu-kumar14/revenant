@@ -159,3 +159,6 @@ spike-157870943: PROVIDER-empty→extracted, unknown, conf 0.00
 - Model not repeatable run to run at temperature 0.
 
 ADR 0001 closed — 2026-11-18 · provider nim · model `nvidia/nemotron-3.5-super-vl-120b-a12b` · prompt v1 · dates 19/20 correct, names 17/20 correct + 3 partial, 0 invented · promise "Catalogue with mandatory review" · scored by the owner against the images from base run `eval-runs/spike-20261117T215437Z.json` plus single-item reruns `T220528Z`, `T220558Z`, `T220621Z`, `T220641Z`, `T220714Z`, `T221647Z` (not one pass).
+
+## 2026-11-18 — Ingest task 1: SQLite client and schema
+Built `src/db/{client.ts,schema.sql,types.ts}` (WAL, foreign_keys=ON, eight tables, idempotent migrate); test-first: `tests/unit/db.test.ts` 1 test failed on unresolved `@/db/client`, then passed; full suite 3 files / 7 tests; `pnpm typecheck` exit 0, `pnpm test` exit 0.
