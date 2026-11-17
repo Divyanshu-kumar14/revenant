@@ -1,0 +1,14 @@
+# Implementation Tasks — Review
+
+- [ ] 1. Implement session auth (`src/auth/session.ts`, `src/app/admin/login/page.tsx`): HMAC cookie, `timingSafeEqual`, 12 h expiry, logout, in-memory rate limit. Verify: tests for valid, tampered, expired and missing cookies; login E2E.
+- [ ] 2. Add `requireAdmin()` to the admin layout and to every `/api/admin/**` handler. Verify: unauthenticated requests redirect or return 401 and leak no item fields.
+- [ ] 3. Implement the transition table and `InvalidTransition` (`src/review/state.ts`). Verify: a table test covers every allowed pair and rejects the rest with `409`.
+- [ ] 4. Implement `reviewItem` accept (`src/review/actions.ts`): validate, upsert `records`, set `published_at` and `reviewed_by`, update status, write audit — one transaction. Verify: published record is returned by `listPublished()` and an audit row exists.
+- [ ] 5. Implement edit, reject and reopen with the same transaction discipline; reject deletes the search row. Verify: rejected item disappears from `searchItems`.
+- [ ] 6. Enforce accept preconditions: non-empty title and date display, `date_start <= date_end`, known precision value. Verify: each failure returns a field-level message and leaves status unchanged.
+- [ ] 7. Build the review screen (`src/app/admin/review/[id]/page.tsx` + `src/components/review/*`): two columns, confidence badges, editable fields, sticky action bar.
+- [ ] 8. Add the keyboard layer: `J`/`K`, `Enter`, `E`, `X` (with confirm), `?`, `Escape`; ignore shortcuts while an input is focused. Verify: Playwright completes a review with the keyboard only.
+- [ ] 9. Implement the post-accept announcement and focus move; list accepted low-confidence fields in an `aria-live` region. Verify: Playwright asserts the announcement text.
+- [ ] 10. Build the admin queue (`src/app/admin/page.tsx`): counts by status, upload form, failed-extraction list with error codes, link into review.
+- [ ] 11. Add the `cataloger` agent hand-off: a "Check with cataloguer" action copies the proposed record into a prompt and shows the verdict; it never edits the record. Verify: manual run against one fixture, logged in `docs/kiro-log.md`.
+- [ ] 12. Run axe on `/admin/login` and `/admin/review/[id]`; fix every serious or critical violation. Verify: `pnpm e2e --grep @a11y`.

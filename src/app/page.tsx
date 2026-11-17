@@ -46,7 +46,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-16 sm:py-24">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-oxblood">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-oxblood-text">
           Kiroween 2026 · Resurrection
         </p>
         <h1 className="mt-5 max-w-3xl font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-6xl">
