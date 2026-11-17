@@ -165,3 +165,5 @@ Built `src/db/{client.ts,schema.sql,types.ts}` (WAL, foreign_keys=ON, eight tabl
 
 ## 2026-11-18 — Ingest task 2: typed query helpers
 Added `src/db/queries.ts` (`insertItem`, `findItemBySha`, `getItem`, `countRows` with table allowlist, append-only `writeAudit`); test-first: 5 new tests in `tests/unit/db.test.ts` failed on unresolved `@/db/queries`, then passed; suite 3 files / 12 tests; `pnpm typecheck` exit 0, `pnpm test` exit 0.
+## 2026-11-18 — Ingest task 3: contentHash
+Added `src/ingest/hash.ts` (sync lowercase hex sha256) and `tests/unit/hash.test.ts` (empty-hash vector, distinct inputs, fast-check determinism/equality/distinctness); test-first: suite failed on unresolved `@/ingest/hash`, then passed; `pnpm typecheck` exit 0, `pnpm test` exit 0.
