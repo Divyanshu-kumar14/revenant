@@ -8,6 +8,7 @@
  *   pnpm spike                 # all items
  *   pnpm spike -- --limit=3    # smoke test, three items
  *   pnpm spike -- --only=spike-173419891
+ *   pnpm spike -- --provider=nim --model=<nim model id>   # default provider is gemini
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -16,7 +17,9 @@ import {
   ExtractionError,
   GeminiExtractor,
   type Extraction,
+  type Extractor,
 } from "../src/extract/provider.ts";
+import { NimExtractor } from "../src/extract/nim.ts";
 import { EXTRACTION_PROMPT, PROMPT_VERSION } from "../src/extract/prompt.ts";
 import type { FixtureItem } from "./fetch-fixtures.ts";
 
@@ -85,7 +88,24 @@ function print(record: ItemResult, index: number, total: number): void {
   console.log(`   elapsed    ${record.ms} ms`);
 }
 
-async function main(): Promise<void> {
+type ProviderName = "gemini" | "nim";
+
+function parseProvider(value: string | undefined): ProviderName {
+  if (value === undefined || value === "gemini") return "gemini";
+  if (value === "nim") return "nim";
+  throw new ExtractionError("CONFIG", `unknown --provider=${value}; expected gemini or nim`);
+}
+
+function buildExtractor(provider: ProviderName): Extractor {
+  if (provider === "nim") {
+    // NimExtractor reads NVIDIA_API_KEY / NVAPI_API_KEY, NIM_MODEL and VISION_BASE_URL itself.
+    return new NimExtractor({
+      prompt: EXTRACTION_PROMPT,
+      promptVersion: PROMPT_VERSION,
+      model: flag("model"),
+    });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.VISION_API_KEY ?? "";
   if (!apiKey) {
     throw new ExtractionError(
@@ -93,6 +113,18 @@ async function main(): Promise<void> {
       "no key found. Put GEMINI_API_KEY=… in .env.local at the repo root, or export it for one run.",
     );
   }
+  return new GeminiExtractor({
+    apiKey,
+    prompt: EXTRACTION_PROMPT,
+    promptVersion: PROMPT_VERSION,
+    model: flag("model") ?? process.env.VISION_MODEL,
+    baseUrl: process.env.VISION_BASE_URL,
+  });
+}
+
+async function main(): Promise<void> {
+  const provider = parseProvider(flag("provider"));
+  const extractor = buildExtractor(provider);
 
   const manifestPath = path.join("fixtures", "spike", "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Manifest;
@@ -110,16 +142,8 @@ async function main(): Promise<void> {
     throw new Error(`no fixture matched --only=${only}`);
   }
 
-  const extractor = new GeminiExtractor({
-    apiKey,
-    prompt: EXTRACTION_PROMPT,
-    promptVersion: PROMPT_VERSION,
-    model: flag("model") ?? process.env.VISION_MODEL,
-    baseUrl: process.env.VISION_BASE_URL,
-  });
-
   console.error(
-    `model ${extractor.model} · prompt ${extractor.promptVersion} · ${selected.length} items\n`,
+    `provider ${provider} · model ${extractor.model} · prompt ${extractor.promptVersion} · ${selected.length} items\n`,
   );
 
   const startedAt = new Date().toISOString();
@@ -179,6 +203,7 @@ async function main(): Promise<void> {
     `${JSON.stringify(
       {
         kind: "accuracy-spike",
+        provider,
         model: extractor.model,
         promptVersion: extractor.promptVersion,
         startedAt,
