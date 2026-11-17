@@ -111,10 +111,17 @@ export class NimExtractor implements Extractor {
       try {
         return validate(repaired);
       } catch (secondError) {
-        throw new ExtractionError(
-          "SCHEMA",
-          `model output failed validation twice: ${describeError(secondError)}`,
-        );
+        // Last resort, only after the repair call also failed: salvage a malformed
+        // date or null list instead of losing the transcription. A coerced date is
+        // marked by confidence.date = 0 so review sees it was not read from the item.
+        try {
+          return coerce(repaired);
+        } catch {
+          throw new ExtractionError(
+            "SCHEMA",
+            `model output failed validation twice: ${describeError(secondError)}`,
+          );
+        }
       }
     }
   }
@@ -245,6 +252,50 @@ function sleep(ms: number): Promise<void> {
 
 function validate(text: string): Extraction {
   return extractionSchema.parse(JSON.parse(extractJsonObject(text)));
+}
+
+const LIST_KEYS = ["people", "places", "subjects"] as const;
+
+/**
+ * Re-validates a response whose only faults are a missing/invalid `date` or
+ * null/non-array entity lists. Any other fault still throws, so content errors
+ * are never hidden. A coerced date becomes unknown with confidence.date = 0.
+ */
+function coerce(text: string): Extraction {
+  const parsed: unknown = JSON.parse(extractJsonObject(text));
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("response is not a JSON object");
+  }
+  const patched: Record<string, unknown> = { ...parsed };
+
+  for (const key of LIST_KEYS) {
+    if (!Array.isArray(patched[key])) patched[key] = [];
+  }
+
+  const confidence =
+    typeof patched.confidence === "object" && patched.confidence !== null && !Array.isArray(patched.confidence)
+      ? { ...(patched.confidence as Record<string, unknown>) }
+      : {};
+  patched.confidence = confidence;
+
+  if (!dateSchema.safeParse(patched.date).success) {
+    patched.date = { display: rawDateText(patched.date), start: null, end: null, precision: "unknown" };
+    confidence.date = 0;
+  }
+
+  return extractionSchema.parse(patched);
+}
+
+const dateSchema = extractionSchema.shape.date;
+
+/** The date as the model wrote it, if it wrote text; otherwise null. */
+function rawDateText(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "object" && value !== null && "display" in value) {
+    const display = (value as { display?: unknown }).display;
+    return typeof display === "string" ? display.trim() || null : null;
+  }
+  return null;
 }
 
 function extractJsonObject(text: string): string {
