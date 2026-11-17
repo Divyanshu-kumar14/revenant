@@ -167,3 +167,5 @@ Built `src/db/{client.ts,schema.sql,types.ts}` (WAL, foreign_keys=ON, eight tabl
 Added `src/db/queries.ts` (`insertItem`, `findItemBySha`, `getItem`, `countRows` with table allowlist, append-only `writeAudit`); test-first: 5 new tests in `tests/unit/db.test.ts` failed on unresolved `@/db/queries`, then passed; suite 3 files / 12 tests; `pnpm typecheck` exit 0, `pnpm test` exit 0.
 ## 2026-11-18 — Ingest task 3: contentHash
 Added `src/ingest/hash.ts` (sync lowercase hex sha256) and `tests/unit/hash.test.ts` (empty-hash vector, distinct inputs, fast-check determinism/equality/distinctness); test-first: suite failed on unresolved `@/ingest/hash`, then passed; `pnpm typecheck` exit 0, `pnpm test` exit 0.
+## 2026-11-18 — Ingest task 4: normalizeImage
+Added `src/ingest/image.ts` (sharp rotate, 2048 fit-inside, jpeg q88 mozjpeg, minimal `IngestError` with `UNDECODABLE`) and `tests/helpers/images.ts` (sharp-generated fixtures); test-first: `tests/unit/image.test.ts` failed on unresolved `@/ingest/image`, then passed; `pnpm typecheck` exit 0, `pnpm test` exit 0.
