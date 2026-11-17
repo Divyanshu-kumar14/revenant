@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Unit tests on source save",
+      "trigger": "PostFileSave",
+      "matcher": "^src/(db|ingest|extract|normalize|jobs|review|archive|auth)/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "pnpm test"
+      },
+      "timeout_ms": 300000
+    }
+  ]
+}

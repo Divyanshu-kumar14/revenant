@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Measure accuracy on fixture change",
+      "trigger": "PostFileSave",
+      "matcher": "^fixtures/.*(manifest|ground-truth)\\.json$",
+      "action": {
+        "type": "command",
+        "command": "pnpm eval"
+      },
+      "timeout_ms": 900000
+    }
+  ]
+}

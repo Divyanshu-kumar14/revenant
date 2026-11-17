@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
 
 # next.js
 /.next/
@@ -19,6 +23,15 @@
 
 # production
 /build
+
+# runtime data: SQLite database, uploaded images, thumbnails
+/data
+
+# generated evaluation output. Nothing here is a source artifact.
+/eval-runs
+
+# downloaded fixture images are reproducible with `pnpm fixtures`
+/fixtures/**/images
 
 # misc
 .DS_Store
@@ -30,8 +43,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files. `.env.example` is committed on purpose.
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +53,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# NOTE: `.kiro/` is intentionally NOT ignored. Kiro specs, steering, hooks and
+# agents are part of the submission and are reviewed by the judges.

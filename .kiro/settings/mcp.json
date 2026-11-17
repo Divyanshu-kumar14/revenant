@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "loc": {
+      "command": "node",
+      "args": ["tools/loc-mcp/server.ts"],
+      "env": {
+        "LOC_USER_AGENT": "revenant/0.1 (Kiroween 2026 archive tool)"
+      },
+      "disabled": false,
+      "autoApprove": ["search_items", "get_item"]
+    }
+  }
+}
