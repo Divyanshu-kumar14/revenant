@@ -131,3 +131,9 @@ One call, no retry. The server is not broken; the LOC edge is refusing this netw
 2. The first probe created a *new* file, which raises `PostFileCreate`; only `PostFileSave` was registered. It would not have fired even with trust.
 
 **Commit:** `docs: record the first verified Kiro hook run and the LOC 403`
+
+## 2026-11-18 — Accuracy spike run
+
+Surface: IDE agent session · model gemini-3.8-flash · prompt v1 · 20 items · extracted/failed: not available, `pnpm spike` printed only its header line and ended with exit code -1 (no summary line, no failures listed) · eval-runs file: none written by this run (the only file present, `spike-20261117T212643Z.json`, predates it). Run not completed; counts not recorded. Not retried.
+
+2026-11-18 — Model default changed to gemini-2.5-flash (`.env.example`, `src/extract/provider.ts`); `pnpm typecheck` exit 0; `pnpm spike -- --limit=1 --model=gemini-2.5-flash` → 1 extracted, 0 failed, prompt v1, item spike-122036494, output `eval-runs/spike-20261117T213812Z.json`. One item only; no accuracy claim.

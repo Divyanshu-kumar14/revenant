@@ -107,7 +107,7 @@ export interface GeminiOptions {
 }
 
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-const DEFAULT_MODEL = "gemini-3.8-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 interface GeminiPart {
   text?: string;
