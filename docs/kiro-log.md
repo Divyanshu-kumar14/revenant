@@ -157,3 +157,5 @@ spike-157870943: PROVIDER-empty→extracted, unknown, conf 0.00
 - Typecheck and test pass (2 files, 6 tests).
 - Coercion-vs-model-zero indistinguishable in output.
 - Model not repeatable run to run at temperature 0.
+
+ADR 0001 closed — 2026-11-18 · provider nim · model `nvidia/nemotron-3.5-super-vl-120b-a12b` · prompt v1 · dates 19/20 correct, names 17/20 correct + 3 partial, 0 invented · promise "Catalogue with mandatory review" · scored by the owner against the images from base run `eval-runs/spike-20261117T215437Z.json` plus single-item reruns `T220528Z`, `T220558Z`, `T220621Z`, `T220641Z`, `T220714Z`, `T221647Z` (not one pass).
