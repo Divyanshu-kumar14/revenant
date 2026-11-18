@@ -8,7 +8,7 @@ import {
   verifySession,
 } from "@/auth/session";
 
-const SECRET = "unit-test-secret";
+const SECRET = "unit-test-secret-padded-to-32-chars";
 const T0 = Date.UTC(2026, 10, 18, 12, 0, 0);
 
 function requestWithCookie(cookie?: string): Request {
@@ -31,7 +31,7 @@ describe("session cookie", () => {
   });
 
   it("rejects a cookie signed with a different secret", () => {
-    const cookie = createSession("volunteer", "other-secret", T0);
+    const cookie = createSession("volunteer", "other-secret-also-padded-to-32-chars", T0);
     expect(verifySession(cookie, SECRET, T0)).toBeNull();
   });
 
@@ -55,6 +55,12 @@ describe("session cookie", () => {
   it("refuses to sign or verify with an empty secret", () => {
     expect(() => createSession("volunteer", "", T0)).toThrow();
     expect(() => verifySession("a.b", "", T0)).toThrow();
+  });
+
+  it("refuses to sign with a secret shorter than 32 characters", () => {
+    expect(() => createSession("volunteer", "x".repeat(31), T0)).toThrow(
+      "Session secret must be at least 32 characters.",
+    );
   });
 });
 

@@ -1,11 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { migrate, openDb } from "@/db/client";
 import { countRows, getItem } from "@/db/queries";
 import { contentHash } from "@/ingest/hash";
-import { ingestFile } from "@/ingest/ingest";
+import { ingestFile, type IngestDb } from "@/ingest/ingest";
+import { normalizeImage } from "@/ingest/image";
 import { invalidBytes, smallSquare } from "../helpers/images";
 
 const NOW = "2026-11-18T12:00:00.000Z";
@@ -122,5 +123,65 @@ describe("ingestFile", () => {
     expect(countRows(deps.db, "items")).toBe(0);
     expect(countRows(deps.db, "audit_events")).toBe(0);
     expect(deps.db.isTransaction).toBe(false);
+  });
+  it("never deletes an earlier upload's file when the write fails with EEXIST", async () => {
+    const deps = setup();
+    const bytes = await smallSquare();
+    const first = await ingestFile({ fileName: "front.jpg", bytes }, deps);
+    const stored = join(deps.dataDir, "uploads", `${first.sha256}.jpg`);
+    const before = readFileSync(stored);
+    // An orphaned file: the row is gone but the bytes on disk are from a successful upload.
+    deps.db.prepare("DELETE FROM audit_events WHERE item_id = ?").run(first.itemId);
+    deps.db.prepare("DELETE FROM items WHERE id = ?").run(first.itemId);
+
+    const err = await ingestFile({ fileName: "again.jpg", bytes }, deps).catch((e: unknown) => e);
+
+    expect(err).toMatchObject({ name: "IngestError", code: "STORE_FAILED" });
+    expect(readFileSync(stored).equals(before)).toBe(true);
+    expect(countRows(deps.db, "items")).toBe(0);
+  });
+
+  it("throws STORE_FAILED and leaves no partial file when the target path is a directory", async () => {
+    const deps = setup();
+    const bytes = await smallSquare();
+    const sha256 = contentHash((await normalizeImage(bytes)).bytes);
+    const target = join(deps.dataDir, "uploads", `${sha256}.jpg`);
+    mkdirSync(target);
+
+    const err = await ingestFile({ fileName: "front.jpg", bytes }, deps).catch((e: unknown) => e);
+
+    expect(err).toMatchObject({ name: "IngestError", code: "STORE_FAILED" });
+    expect(lstatSync(target).isDirectory()).toBe(true);
+    expect(readdirSync(target)).toEqual([]);
+    expect(uploads(deps)).toEqual([`${sha256}.jpg`]);
+    expect(countRows(deps.db, "items")).toBe(0);
+  });
+
+  it("surfaces the original error and still removes the file when ROLLBACK itself throws", async () => {
+    const deps = setup();
+    const real = deps.db;
+    // Wrap the real connection: COMMIT fails after the file is written, then ROLLBACK fails too.
+    const db = new Proxy(real, {
+      get(target, prop) {
+        if (prop === "exec") {
+          return (sql: string) => {
+            if (sql === "COMMIT") throw new Error("commit failed");
+            if (sql === "ROLLBACK") throw new Error("rollback failed");
+            return target.exec(sql);
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as IngestDb;
+
+    const err = await ingestFile({ fileName: "front.jpg", bytes: await smallSquare() }, { ...deps, db }).catch(
+      (e: unknown) => e,
+    );
+    real.exec("ROLLBACK");
+
+    expect(err).toMatchObject({ message: "commit failed" });
+    expect(uploads(deps)).toEqual([]);
+    expect(countRows(real, "items")).toBe(0);
   });
 });

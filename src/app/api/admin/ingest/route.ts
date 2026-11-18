@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { Unauthorized, requireAdmin } from "@/auth/session";
+import { MIN_SECRET_LENGTH, Unauthorized, requireAdmin } from "@/auth/session";
 import { migrate, openDb } from "@/db/client";
 import { IngestError, MAX_UPLOAD_BYTES, type IngestErrorCode } from "@/ingest/errors";
 import { ingestFile, type IngestDb, type IngestResult } from "@/ingest/ingest";
@@ -40,6 +40,10 @@ export async function POST(request: Request): Promise<Response> {
     console.error("ingest route: CONFIG SESSION_SECRET is not set");
     return fail(500, "CONFIG", "The server is not configured for admin sessions.");
   }
+  if (secret.length < MIN_SECRET_LENGTH) {
+    console.error(`ingest route: CONFIG SESSION_SECRET is shorter than ${MIN_SECRET_LENGTH} characters`);
+    return fail(500, "CONFIG", "The server is not configured for admin sessions.");
+  }
 
   let actor: string;
   try {
@@ -54,7 +58,7 @@ export async function POST(request: Request): Promise<Response> {
     return fail(411, "LENGTH_REQUIRED", "The upload must declare its size.");
   }
   if (declared > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES) {
-    return fail(413, "TOO_LARGE", `The upload is ${declared} bytes; the limit is ${MAX_UPLOAD_BYTES} bytes.`);
+    return tooLarge(declared);
   }
 
   let form: FormData;
@@ -74,6 +78,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { fileName, caption } = parsed.data;
+  // The exact size is free here; reject before copying the file into memory twice.
+  if (parsed.data.file.size > MAX_UPLOAD_BYTES) return tooLarge(parsed.data.file.size);
   const bytes = Buffer.from(await parsed.data.file.arrayBuffer());
   const dataDir = process.env.REVENANT_DATA_DIR ?? "./data";
   const attempt = () => ingestFile({ fileName, bytes, caption, actor }, { db: database(dataDir), dataDir });
@@ -133,6 +139,10 @@ function database(dataDir: string): IngestDb {
 function ok(result: IngestResult): Response {
   const body: Body = { status: result.status, itemId: result.itemId, sha256: result.sha256 };
   return Response.json(body, { status: 200 });
+}
+
+function tooLarge(bytes: number): Response {
+  return fail(413, "TOO_LARGE", `The upload is ${bytes} bytes; the limit is ${MAX_UPLOAD_BYTES} bytes.`);
 }
 
 function fail(status: number, code: ErrorCode, message: string): Response {

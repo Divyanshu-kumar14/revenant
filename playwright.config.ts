@@ -5,7 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Not 3000, so a developer's running server (with their own secret and data) is never reused.
 const PORT = 3100;
-const SESSION_SECRET = "e2e-secret-not-real";
+// At least 32 characters, the floor src/auth/session.ts enforces.
+const SESSION_SECRET = "e2e-secret-not-real-padded-to-32-chars";
 
 // Playwright loads this file in the runner and again in every worker. Workers inherit the
 // runner's environment, so the temp directory is created once and shared.

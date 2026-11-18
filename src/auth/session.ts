@@ -9,6 +9,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "revenant_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+/** A shorter HMAC key is guessable offline from one captured cookie. */
+export const MIN_SECRET_LENGTH = 32;
 
 export interface Session {
   actor: string;
@@ -60,9 +62,12 @@ function sign(payload: string, secret: string): Buffer {
   return createHmac("sha256", secret).update(payload).digest();
 }
 
-/** An empty secret would make every signature forgeable; fail loudly instead of allowing. */
+/** A weak secret would make signatures forgeable; fail loudly instead of allowing. */
 function assertSecret(secret: string): void {
   if (!secret) throw new Error("Session secret is empty.");
+  if (secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`Session secret must be at least ${MIN_SECRET_LENGTH} characters.`);
+  }
 }
 
 function parsePayload(payload: string): Session | null {

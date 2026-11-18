@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +9,7 @@ import { countRows } from "@/db/queries";
 import { MAX_UPLOAD_BYTES } from "@/ingest/errors";
 import { invalidBytes, smallSquare } from "../helpers/images";
 
-const SECRET = "route-test-secret";
+const SECRET = "route-test-secret-padded-to-32-chars";
 const URL_ = "http://localhost/api/admin/ingest";
 const originalSecret = process.env.SESSION_SECRET;
 const originalDataDir = process.env.REVENANT_DATA_DIR;
@@ -25,8 +25,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env.SESSION_SECRET = originalSecret;
-  process.env.REVENANT_DATA_DIR = originalDataDir;
+  // Assigning undefined to process.env stores the string "undefined", so delete instead.
+  if (originalSecret === undefined) delete process.env.SESSION_SECRET;
+  else process.env.SESSION_SECRET = originalSecret;
+  if (originalDataDir === undefined) delete process.env.REVENANT_DATA_DIR;
+  else process.env.REVENANT_DATA_DIR = originalDataDir;
+  rmSync(dataDir, { recursive: true, force: true });
+  dataDir = "";
 });
 
 const validCookie = () => `${SESSION_COOKIE}=${createSession("volunteer", SECRET)}`;
@@ -95,6 +100,30 @@ describe("POST /api/admin/ingest", () => {
 
     expect(response.status).toBe(500);
     expect((await response.json()).error.code).toBe("CONFIG");
+    expect(itemCount()).toBe(0);
+  });
+
+  it("returns 500 CONFIG and ingests nothing when SESSION_SECRET is shorter than 32 characters", async () => {
+    const request = await uploadRequest({ bytes: await smallSquare(), name: "front.jpg" }, { cookie: validCookie() });
+    process.env.SESSION_SECRET = "x".repeat(31);
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.code).toBe("CONFIG");
+    expect(itemCount()).toBe(0);
+  });
+
+  it("returns 413 from the exact file size when the multipart body fits the Content-Length allowance", async () => {
+    const request = await uploadRequest(
+      { bytes: Buffer.alloc(MAX_UPLOAD_BYTES + 1), name: "huge.jpg" },
+      { cookie: validCookie() },
+    );
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(body.error.code).toBe("TOO_LARGE");
+    expect(body.error.message).toBe(`The upload is ${MAX_UPLOAD_BYTES + 1} bytes; the limit is ${MAX_UPLOAD_BYTES} bytes.`);
     expect(itemCount()).toBe(0);
   });
 
