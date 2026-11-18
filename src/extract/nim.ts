@@ -3,6 +3,7 @@ import { z } from "zod";
 import { EXTRACTION_PROMPT, PROMPT_VERSION } from "./prompt.ts";
 import {
   ExtractionError,
+  extractJsonObject,
   extractionSchema,
   type Extraction,
   type ExtractionResult,
@@ -13,7 +14,8 @@ import {
 /**
  * NVIDIA NIM adapter. NIM speaks the OpenAI chat-completions dialect, so images
  * go as `image_url` parts holding a base64 data URI. The Gemini adapter in
- * provider.ts is untouched; the small JSON helpers below are copies on purpose.
+ * provider.ts is untouched; the small JSON helpers below are copies on purpose, except
+ * `extractJsonObject`, which is shared from provider.ts so `deriveProposal` parses the same way.
  */
 
 export interface NimOptions {
@@ -304,16 +306,6 @@ function rawDateText(value: unknown): string | null {
   return null;
 }
 
-function extractJsonObject(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = (fenced?.[1] ?? text).trim();
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start === -1 || end <= start) {
-    throw new Error("no JSON object found in the response");
-  }
-  return body.slice(start, end + 1);
-}
 
 function describeError(error: unknown): string {
   if (error instanceof z.ZodError) {

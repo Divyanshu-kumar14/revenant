@@ -278,7 +278,14 @@ function validate(text: string): Extraction {
   return extractionSchema.parse(JSON.parse(extractJsonObject(text)));
 }
 
-function extractJsonObject(text: string): string {
+/**
+ * Finds the JSON object in a model response. When the text contains a markdown code fence
+ * (```json or bare ```), only the first fenced block is searched; otherwise the whole trimmed text
+ * is. Returns the span from the first `{` to the last `}` of that body, and throws when there is
+ * no such span. Shared by both adapters and by `deriveProposal`, so a stored raw response is
+ * parsed exactly as the adapter that accepted it parsed it.
+ */
+export function extractJsonObject(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = (fenced?.[1] ?? text).trim();
   const start = body.indexOf("{");
