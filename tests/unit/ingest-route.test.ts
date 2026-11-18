@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -18,9 +18,8 @@ let dataDir = "";
 
 beforeEach(() => {
   process.env.SESSION_SECRET = SECRET;
-  // A fresh data dir per test; uploads/ is created here because the startup guard is Task 9.
+  // A fresh, empty data dir per test. uploads/ is not created here: the route must create it.
   dataDir = mkdtempSync(join(tmpdir(), "revenant-route-"));
-  mkdirSync(join(dataDir, "uploads"));
   process.env.REVENANT_DATA_DIR = dataDir;
 });
 

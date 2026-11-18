@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { MIN_SECRET_LENGTH, Unauthorized, requireAdmin } from "@/auth/session";
+import { ensureDataDir, resolveDataDir } from "@/data-dir";
 import { migrate, openDb } from "@/db/client";
 import { IngestError, MAX_UPLOAD_BYTES, type IngestErrorCode } from "@/ingest/errors";
 import { ingestFile, type IngestDb, type IngestResult } from "@/ingest/ingest";
@@ -81,7 +82,7 @@ export async function POST(request: Request): Promise<Response> {
   // The exact size is free here; reject before copying the file into memory twice.
   if (parsed.data.file.size > MAX_UPLOAD_BYTES) return tooLarge(parsed.data.file.size);
   const bytes = Buffer.from(await parsed.data.file.arrayBuffer());
-  const dataDir = process.env.REVENANT_DATA_DIR ?? "./data";
+  const dataDir = resolveDataDir();
   const attempt = () => ingestFile({ fileName, bytes, caption, actor }, { db: database(dataDir), dataDir });
 
   try {
@@ -120,11 +121,13 @@ function isBusy(error: unknown): boolean {
 
 const connections = new Map<string, IngestDb>();
 
-/** One migrated connection per data directory, opened on first use. */
+/** One migrated connection per data directory, opened on first use after the directory check. */
 function database(dataDir: string): IngestDb {
   const path = join(dataDir, "revenant.db");
   const existing = connections.get(path);
   if (existing) return existing;
+  // Creates the data directory and uploads/ on a fresh container; throws if either is unwritable.
+  ensureDataDir(dataDir);
   const db = openDb(path);
   try {
     migrate(db);

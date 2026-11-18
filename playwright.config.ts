@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
@@ -15,9 +15,6 @@ const dataDir =
 process.env.REVENANT_E2E_DATA_DIR = dataDir;
 // Specs read the secret from here to mint a session cookie.
 process.env.SESSION_SECRET = SESSION_SECRET;
-// Ingest writes to <dataDir>/uploads with `wx`; until ingest Task 9's startup guard exists,
-// the directory has to be created before the first upload.
-mkdirSync(join(dataDir, "uploads"), { recursive: true });
 
 export default defineConfig({
   testDir: "./tests/e2e",
