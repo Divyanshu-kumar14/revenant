@@ -18,14 +18,26 @@ describe("displayName", () => {
     expect(displayName("J. H. van 't Hoff")).toBe("J. H. van 't Hoff");
   });
 
-  it("strips wrapping quotes and brackets, and a trailing comma or full stop", () => {
-    expect(displayName('"John Smith"')).toBe("John Smith");
+  it("strips a matched pair of quotation marks or brackets wrapping the whole name", () => {
+    expect(displayName('"Müller"')).toBe("Müller");
     expect(displayName("“Müller”")).toBe("Müller");
-    expect(displayName("(J. Smith)")).toBe("J. Smith");
+    expect(displayName("«Müller»")).toBe("Müller");
+    expect(displayName("„Müller“")).toBe("Müller");
+    expect(displayName("(Grace)")).toBe("Grace");
     expect(displayName("[Mary Jones]")).toBe("Mary Jones");
-    expect(displayName("Smith, John.")).toBe("Smith, John");
-    expect(displayName("Smith,")).toBe("Smith");
-    expect(displayName('("Smith").')).toBe("Smith");
+    expect(displayName('"O\'Brien"')).toBe("O'Brien");
+    expect(displayName('("Smith")')).toBe("Smith");
+  });
+
+  it("keeps initials, abbreviations and a trailing comma", () => {
+    expect(displayName("Smith, J.")).toBe("Smith, J.");
+    expect(displayName("John Smith Jr.")).toBe("John Smith Jr.");
+    expect(displayName("Smith,")).toBe("Smith,");
+  });
+
+  it("does not strip quotation marks or brackets that are not a matched pair", () => {
+    expect(displayName("(Grace]")).toBe("(Grace]");
+    expect(displayName("\"Grace'")).toBe("\"Grace'");
   });
 
   it("does not strip a lone leading apostrophe that is part of the name", () => {

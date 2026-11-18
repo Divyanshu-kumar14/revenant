@@ -44,7 +44,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 
 `display_name` is what a person reads; `name_key` is what the database matches on.
 
-- `displayName`: Unicode NFKC, trim, collapse internal whitespace, strip wrapping punctuation, preserve diacritics and non-Latin scripts. Never strip accents; never transliterate. `Müller` stays `Müller`, `李 小龙` stays `李 小龙`.
+- `displayName`: Unicode NFKC, trim, collapse internal whitespace, strip a matched pair of quotation marks or brackets that wraps the whole name, preserve diacritics and non-Latin scripts. Keep internal punctuation, initials and abbreviations such as `J.` and `Jr.`; never strip a trailing full stop or comma. NFKC may fold ligatures and width variants (`ﬁ` → `fi`, `Ａ` → `A`), which is intended. Never strip accents; never transliterate. `Müller` stays `Müller`, `李 小龙` stays `李 小龙`. `İstanbul` and `Istanbul` intentionally produce different keys, because case mapping is locale-independent.
 - `nameKey`: apply `displayName`, lowercase with a locale-independent lowercase, collapse whitespace around commas to `, `, keep diacritics. Idempotent.
 - Identity: `(type, name_key)` is unique. Do not merge `J. Smith` with `John Smith`, do not expand nicknames, do not infer gender, do not add honorifics the source does not contain.
 - Types are exactly `person`, `place`, `subject`.
