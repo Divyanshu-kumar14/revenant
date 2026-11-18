@@ -20,10 +20,25 @@ export function checkSize(bytes: number, limit: number = MAX_UPLOAD_BYTES): void
   }
 }
 
-const HEIC_MARKERS = ["ftypheic", "ftypheix", "ftyphevc"];
+const HEIF_BRANDS = new Set(["heic", "heix", "hevc", "hevx"]);
+/** Box size (4) + "ftyp" (4) + major brand (4). */
+const FTYP_MIN_BYTES = 12;
 
-/** Detect HEIC from ISO-BMFF ftyp brand magic bytes in the first 32 bytes. No decoding. */
+/**
+ * Detect HEIC/HEIF from the leading ISO-BMFF `ftyp` box: magic bytes only, no decoding.
+ * Returns "heic" when the major brand or any compatible brand is heic, heix, hevc or hevx.
+ * Reads no further than the declared box size or the end of the buffer, whichever is first.
+ */
 export function sniffUnsupported(bytes: Uint8Array | Buffer): "heic" | null {
-  const head = Buffer.from(bytes.subarray(0, 32)).toString("latin1");
-  return HEIC_MARKERS.some((marker) => head.includes(marker)) ? "heic" : null;
+  if (bytes.length < FTYP_MIN_BYTES) return null;
+  const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.toString("latin1", 4, 8) !== "ftyp") return null;
+  const size = view.readUInt32BE(0);
+  if (size < FTYP_MIN_BYTES) return null;
+  const end = Math.min(size, view.length);
+  // Offset 8 is the major brand, 12 the minor version, 16 onward the compatible brands.
+  for (let offset = 8; offset + 4 <= end; offset += 4) {
+    if (HEIF_BRANDS.has(view.toString("latin1", offset, offset + 4))) return "heic";
+  }
+  return null;
 }

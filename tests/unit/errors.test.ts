@@ -5,13 +5,17 @@ import { invalidBytes, smallSquare } from "../helpers/images";
 
 const MiB = 1024 * 1024;
 
-/** Minimal ISO-BMFF header: 4-byte box size, "ftyp", 4-byte major brand, minor version. */
-function ftypBox(brand: string): Buffer {
-  const box = Buffer.alloc(24);
-  box.writeUInt32BE(24, 0);
+/**
+ * ISO-BMFF ftyp box: 4-byte size, "ftyp", major brand, zero minor version, compatible brands.
+ * `declaredSize` overrides the size field, to describe a box longer than the bytes present.
+ */
+function ftypBox(major: string, compatible: string[] = [], declaredSize?: number): Buffer {
+  const length = 16 + 4 * compatible.length;
+  const box = Buffer.alloc(length);
+  box.writeUInt32BE(declaredSize ?? length, 0);
   box.write("ftyp", 4, "ascii");
-  box.write(brand, 8, "ascii");
-  box.write("mif1heic", 16, "ascii");
+  box.write(major, 8, "ascii");
+  compatible.forEach((brand, i) => box.write(brand, 16 + 4 * i, "ascii"));
   return box;
 }
 
@@ -39,6 +43,34 @@ describe("IngestError codes", () => {
     expect(sniffUnsupported(new Uint8Array(0))).toBeNull();
     const err = new IngestError("UNSUPPORTED_FORMAT", "HEIC is not supported");
     expect(err.code).toBe("UNSUPPORTED_FORMAT");
+  });
+
+  describe("sniffUnsupported reads the ftyp compatible brands", () => {
+    it("detects heic in the compatible list behind a mif1 major brand", () => {
+      expect(sniffUnsupported(ftypBox("mif1", ["mif1", "heic"]))).toBe("heic");
+    });
+
+    it("detects heic in the compatible list behind an msf1 major brand", () => {
+      expect(sniffUnsupported(ftypBox("msf1", ["msf1", "iso8", "heic"]))).toBe("heic");
+    });
+
+    it("returns null for mif1 with no HEIF brand anywhere", () => {
+      expect(sniffUnsupported(ftypBox("mif1", ["mif1", "miaf"]))).toBeNull();
+    });
+
+    it("returns null for an AVIF major brand", () => {
+      expect(sniffUnsupported(ftypBox("avif", ["avif", "mif1", "miaf"]))).toBeNull();
+    });
+
+    it("finds a brand inside the available bytes when the declared size exceeds the buffer", () => {
+      const box = ftypBox("mif1", ["heic"], 64);
+      expect(box.length).toBeLessThan(64);
+      expect(sniffUnsupported(box)).toBe("heic");
+    });
+
+    it("returns null for fewer than 12 bytes", () => {
+      expect(sniffUnsupported(ftypBox("heic").subarray(0, 11))).toBeNull();
+    });
   });
 
   it("STORE_FAILED: constructor passes code, message and detail through", () => {
