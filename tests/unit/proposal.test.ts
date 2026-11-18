@@ -126,7 +126,13 @@ describe("createExtractor", () => {
   });
 
   it("rejects an unknown EXTRACTOR with CONFIG", () => {
-    expect(codeOf(() => createExtractor(env({ EXTRACTOR: "provider", NVIDIA_API_KEY: "dummy" })))).toBe("CONFIG");
+    expect(codeOf(() => createExtractor(env({ EXTRACTOR: "bogus", NVIDIA_API_KEY: "dummy" })))).toBe("CONFIG");
+  });
+
+  it("treats EXTRACTOR=provider as the provider path, not as an error", () => {
+    expect(
+      createExtractor(env({ EXTRACTOR: "provider", NVIDIA_API_KEY: "dummy" })),
+    ).toBeInstanceOf(NimExtractor);
   });
 
   it("treats a blank EXTRACTOR as absent", () => {
@@ -135,6 +141,13 @@ describe("createExtractor", () => {
 
   it("defaults to NIM", () => {
     expect(createExtractor(env({ NVIDIA_API_KEY: "dummy" }))).toBeInstanceOf(NimExtractor);
+  });
+
+  it("reads the Gemini model from VISION_MODEL, the name .env.example uses", () => {
+    const extractor = createExtractor(
+      env({ VISION_PROVIDER: "gemini", GEMINI_API_KEY: "dummy", VISION_MODEL: "vision-model-x" }),
+    );
+    expect(extractor.model).toBe("vision-model-x");
   });
 
   it("builds Gemini when asked", () => {
@@ -156,5 +169,38 @@ describe("createExtractor", () => {
         })),
       ),
     ).toBe("CONFIG");
+  });
+
+  it("ignores process.env.NIM_MODEL, so a shell setting cannot change the model", () => {
+    const before = process.env.NIM_MODEL;
+    process.env.NIM_MODEL = "leak-model";
+    try {
+      expect(createExtractor(env({ NVIDIA_API_KEY: "dummy" })).model).not.toBe("leak-model");
+    } finally {
+      if (before === undefined) delete process.env.NIM_MODEL;
+      else process.env.NIM_MODEL = before;
+    }
+  });
+
+  it("ignores process.env.NVIDIA_API_KEY, so a shell key cannot satisfy an empty env", () => {
+    const before = process.env.NVIDIA_API_KEY;
+    process.env.NVIDIA_API_KEY = "leaked-key";
+    try {
+      expect(codeOf(() => createExtractor(env({})))).toBe("NO_KEY");
+    } finally {
+      if (before === undefined) delete process.env.NVIDIA_API_KEY;
+      else process.env.NVIDIA_API_KEY = before;
+    }
+  });
+
+  it("ignores process.env.VISION_BASE_URL, so a shell endpoint cannot trip the Google guard", () => {
+    const before = process.env.VISION_BASE_URL;
+    process.env.VISION_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+    try {
+      expect(createExtractor(env({ NVIDIA_API_KEY: "dummy" }))).toBeInstanceOf(NimExtractor);
+    } finally {
+      if (before === undefined) delete process.env.VISION_BASE_URL;
+      else process.env.VISION_BASE_URL = before;
+    }
   });
 });

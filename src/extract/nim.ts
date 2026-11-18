@@ -70,8 +70,11 @@ export class NimExtractor implements Extractor {
     this.apiKey = apiKey;
     this.prompt = options.prompt ?? EXTRACTION_PROMPT;
     this.promptVersion = options.promptVersion ?? PROMPT_VERSION;
-    this.model = options.model || process.env.NIM_MODEL || DEFAULT_MODEL;
-    this.baseUrl = (options.baseUrl || process.env.VISION_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+    // Model and endpoint come from the caller or the adapter default, never from process.env:
+    // createExtractor(env) is the one place the environment is read, so a test that passes an
+    // env cannot be influenced by the shell it runs in.
+    this.model = options.model || DEFAULT_MODEL;
+    this.baseUrl = (options.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
 

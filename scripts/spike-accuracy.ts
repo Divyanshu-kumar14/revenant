@@ -98,11 +98,12 @@ function parseProvider(value: string | undefined): ProviderName {
 
 function buildExtractor(provider: ProviderName): Extractor {
   if (provider === "nim") {
-    // NimExtractor reads NVIDIA_API_KEY / NVAPI_API_KEY, NIM_MODEL and VISION_BASE_URL itself.
+    // The adapter reads no environment itself; only the key falls back inside it.
     return new NimExtractor({
       prompt: EXTRACTION_PROMPT,
       promptVersion: PROMPT_VERSION,
-      model: flag("model"),
+      model: flag("model") ?? process.env.NIM_MODEL,
+      baseUrl: process.env.VISION_BASE_URL,
     });
   }
 

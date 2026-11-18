@@ -115,7 +115,7 @@ export async function runBatch(deps: ExtractDeps, options: { limit: number; item
 
 The `ExtractionResult` change is to an internal interface, but it is not local. It touches both adapters (`GeminiExtractor` and `NimExtractor` return the text they validated and the two flags), the spike script (`scripts/spike-accuracy.ts` reads `.extraction` from the result), and `tests/unit/nim-coerce.test.ts`. Eval-run files written before the change are unaffected.
 
-`createExtractor(env)` returns `FixtureExtractor` when `EXTRACTOR=fixture`. Otherwise it reads `VISION_PROVIDER` (`nim` or `gemini`, default `nim`) and constructs that adapter, which throws `NO_KEY` or `CONFIG` from its constructor when the environment is wrong.
+`createExtractor(env)` returns `FixtureExtractor` when `EXTRACTOR=fixture`. `EXTRACTOR=provider`, or an unset value, reads `VISION_PROVIDER` (`nim` or `gemini`, default `nim`) and constructs that adapter, which throws `NO_KEY` or `CONFIG` from its constructor when the environment is wrong; any other `EXTRACTOR` value is `CONFIG`. Adapters receive every setting as an option and read no environment themselves, so `createExtractor(env)` is the only place the environment is read and a test that passes an env cannot be influenced by the shell it runs in.
 
 ## State machine
 

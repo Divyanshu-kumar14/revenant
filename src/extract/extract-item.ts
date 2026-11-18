@@ -66,18 +66,24 @@ export interface Proposal {
 
 /**
  * Builds the extractor a run uses from the environment it is given. `EXTRACTOR=fixture` gives the
- * fixture; otherwise `VISION_PROVIDER` (default `nim`) picks the adapter, whose constructor raises
- * `NO_KEY` or `CONFIG`. Never fetches.
+ * fixture; `EXTRACTOR=provider` or an unset value follows `VISION_PROVIDER` (default `nim`), whose
+ * constructor raises `NO_KEY` or `CONFIG`. Every adapter setting is passed as an option, so this
+ * function is the only place the environment is read. Never fetches.
  */
 export function createExtractor(env: NodeJS.ProcessEnv): Extractor {
   const extractor = env.EXTRACTOR?.trim() ?? "";
   if (extractor === "fixture") return new FixtureExtractor();
-  if (extractor !== "") {
-    throw new ExtractionError("CONFIG", `EXTRACTOR=${extractor} is not supported; use fixture or leave it unset`);
+  if (extractor !== "" && extractor !== "provider") {
+    throw new ExtractionError(
+      "CONFIG",
+      `EXTRACTOR=${extractor} is not supported; use fixture or provider`,
+    );
   }
   const provider = env.VISION_PROVIDER?.trim().toLowerCase() || "nim";
   if (provider === "nim") {
     return new NimExtractor({
+      // resolveNimKey returns "" when absent, which is not nullish: the constructor cannot fall
+      // back to process.env and report a key the caller never passed.
       apiKey: resolveNimKey(env),
       model: env.NIM_MODEL,
       baseUrl: env.VISION_BASE_URL,
@@ -88,8 +94,8 @@ export function createExtractor(env: NodeJS.ProcessEnv): Extractor {
       apiKey: env.GEMINI_API_KEY || env.VISION_API_KEY || "",
       prompt: EXTRACTION_PROMPT,
       promptVersion: PROMPT_VERSION,
-      model: env.GEMINI_MODEL || undefined,
-      baseUrl: env.GEMINI_BASE_URL || undefined,
+      model: env.VISION_MODEL || undefined,
+      baseUrl: env.VISION_BASE_URL || undefined,
     });
   }
   throw new ExtractionError("CONFIG", `VISION_PROVIDER=${provider} is not supported; use nim or gemini`);
