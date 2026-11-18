@@ -14,7 +14,15 @@ export function openDb(path?: string): DatabaseSync {
   return db;
 }
 
-/** Apply schema.sql. Safe to run any number of times. */
+/**
+ * Apply schema.sql, then add columns that `CREATE TABLE IF NOT EXISTS` cannot add to an
+ * existing table. Each ALTER is guarded by PRAGMA table_info, so this is safe to run any number of times.
+ */
 export function migrate(db: DatabaseSync): void {
   db.exec(readFileSync(SCHEMA_URL, "utf8"));
+  const extractionColumns = db.prepare("PRAGMA table_info(extractions)").all() as Array<{ name: unknown }>;
+  if (!extractionColumns.some((column) => column.name === "prompt_version")) {
+    // SQLite allows ADD COLUMN ... NOT NULL only with a non-null default.
+    db.exec("ALTER TABLE extractions ADD COLUMN prompt_version TEXT NOT NULL DEFAULT 'v1'");
+  }
 }

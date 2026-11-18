@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS extractions (
   model      TEXT NOT NULL,
   raw_json   TEXT NOT NULL,
   latency_ms INTEGER,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Last, matching the column order of a database migrated by the ALTER in client.ts migrate().
+  prompt_version TEXT NOT NULL DEFAULT 'v1'
 );
 CREATE INDEX IF NOT EXISTS extractions_item_idx ON extractions(item_id);
 

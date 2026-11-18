@@ -18,6 +18,65 @@ describe("sqlite client and schema", () => {
   });
 });
 
+describe("extractions.prompt_version migration", () => {
+  // The extractions definition before the prompt_version column existed.
+  const OLD_SCHEMA = `
+    CREATE TABLE items (
+      id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL,
+      stored_path TEXT NOT NULL, caption TEXT,
+      status TEXT NOT NULL CHECK (status IN ('queued','extracting','needs_review','published','rejected')),
+      error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE extractions (
+      id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id), model TEXT NOT NULL,
+      raw_json TEXT NOT NULL, latency_ms INTEGER, created_at TEXT NOT NULL
+    );`;
+  const at = "2026-11-18T00:00:00Z";
+  const columns = (db: ReturnType<typeof openDb>) =>
+    (db.prepare("PRAGMA table_info(extractions)").all() as Array<{ name: string }>).map((c) => c.name);
+
+  it("a fresh database has prompt_version after one migrate()", () => {
+    const db = openDb(":memory:");
+    migrate(db);
+    expect(columns(db)).toContain("prompt_version");
+  });
+
+  it("an existing database with the old definition gains the column and keeps its rows", () => {
+    const db = openDb(":memory:");
+    db.exec(OLD_SCHEMA);
+    db.prepare(INSERT_ITEM).run("i1", "abc", "a.jpg", "uploads/abc.jpg", "needs_review", at, at);
+    db.prepare("INSERT INTO extractions (id,item_id,model,raw_json,latency_ms,created_at) VALUES (?,?,?,?,?,?)").run(
+      "e1", "i1", "m", "{}", 10, at,
+    );
+    expect(columns(db)).not.toContain("prompt_version");
+
+    migrate(db);
+
+    expect(columns(db)).toContain("prompt_version");
+    expect(db.prepare("SELECT id, item_id, model, raw_json, latency_ms, prompt_version FROM extractions").all()).toEqual([
+      { id: "e1", item_id: "i1", model: "m", raw_json: "{}", latency_ms: 10, prompt_version: "v1" },
+    ]);
+  });
+
+  it("migrate() twice leaves exactly one prompt_version column", () => {
+    const db = openDb(":memory:");
+    db.exec(OLD_SCHEMA);
+    migrate(db);
+    migrate(db);
+    expect(columns(db).filter((name) => name === "prompt_version")).toHaveLength(1);
+  });
+
+  it("defaults prompt_version to 'v1' on an insert that omits it", () => {
+    const db = openDb(":memory:");
+    migrate(db);
+    db.prepare(INSERT_ITEM).run("i1", "abc", "a.jpg", "uploads/abc.jpg", "needs_review", at, at);
+    db.prepare("INSERT INTO extractions (id,item_id,model,raw_json,created_at) VALUES (?,?,?,?,?)").run(
+      "e1", "i1", "m", "{}", at,
+    );
+    expect(db.prepare("SELECT prompt_version FROM extractions WHERE id = ?").get("e1")).toEqual({ prompt_version: "v1" });
+  });
+});
+
 const NOW = "2026-11-18T00:00:00Z";
 function freshDb() {
   const db = openDb(":memory:");
