@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { SESSION_COOKIE } from "@/auth/session";
 
 // Not tested here: the five-failure limit (the dev server's limiter is shared across workers
-// and retries; tests/unit/login-route.test.ts proves it) and the /admin gate (review task 2).
+// and retries; tests/unit/login-route.test.ts proves it). The /admin gate is in admin-gate.spec.ts.
 
 function adminPassword(): string {
   const password = process.env.ADMIN_PASSWORD;

@@ -10,7 +10,9 @@ src/app/                 Next.js App Router
   items/[id]/            public item page
   search/                public search + facets
   map/                   public map
-  admin/                 login, ingest, review queue, review/[id], evals
+  admin/
+    login/               public sign-in page, outside the gate
+    (protected)/         layout.tsx calls requireAdminPage(); ingest, review queue, review/[id], evals
   api/                   route handlers (ingest, batch, review, search, export, health)
 src/archive/             read models: items, search, citation, geo, export
 src/auth/                session cookie and requireAdmin(), password compare, login rate limiter

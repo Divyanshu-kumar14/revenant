@@ -8,10 +8,11 @@
 
 ```
 src/auth/session.ts            createSession, verifySession, requireAdmin
+src/auth/gate.ts               requireAdminPage — page-side gate, redirects to /admin/login
 src/review/actions.ts          reviewItem(decision) — the only mutation entry point
 src/review/state.ts            allowed transitions
 src/app/admin/login/page.tsx   password form
-src/app/admin/page.tsx         ingest + queue summary
+src/app/admin/(protected)/     layout.tsx gates the group; page.tsx is ingest + queue summary
 src/app/admin/review/[id]/page.tsx
 src/components/review/*        image panel, field list, confidence badge, shortcuts
 src/app/api/admin/review/route.ts  thin JSON wrapper for tests and future clients
