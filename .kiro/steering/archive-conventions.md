@@ -38,6 +38,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 8. A year alone never gains a month or day. A month alone never gains a year.
 9. `date_display` is normalised, not copied: exact day → `December 25, 1938`; month → `March 1938`; year → `1938`; decade → `1930s`; circa → `ca. 1900`; season → `Summer 1938`; range → `1935–1939` with an en dash; open → `before 1940` / `after 1940`.
 10. `normalizeDate(normalizeDate(x).display).display === normalizeDate(x).display`. Idempotency is a tested property.
+11. A date is evidence only when it is visible in the image, supplied in the caption, or present in the item's existing metadata. Never infer a date from clothing, technology, film stock, handwriting style or a subject's apparent age. `unknown` is the correct answer for an undated photograph.
 
 ## 2. Names
 
@@ -56,6 +57,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 - Every extracted field carries a model-reported confidence in `[0, 1]`. This is a self-report, not a calibrated probability; the UI labels it **model confidence**.
 - `< 0.7` is **low**. Low-confidence fields are visually marked, never hidden, and listed explicitly when the reviewer accepts the item in one keystroke. Missing confidence is treated as low.
 - Confidence never gates publication by itself; a human decision does. Rejecting a field is a decision and is recorded.
+- When the provider returns a malformed or missing date and the adapter coerces it instead of failing, the coerced date carries precision `unknown` and confidence `0`, so review always marks it low.
 
 ## 4. Transcription
 
@@ -99,3 +101,13 @@ Omit a missing element and its separator rather than emitting `undefined` or an 
 ## 8. Identifiers
 
 Public identifiers are `RVN-` followed by a zero-padded sequence (`RVN-0001`). Internal ids are opaque and may change; the public identifier does not.
+
+## 9. Ingest
+
+- Identity is the normalised pixels, not the upload: `sha256` is computed over the normalised JPEG, so two files that normalise to the same bytes are one item whatever their names or formats. The stored copy is `uploads/<sha256>.jpg` relative to the data directory.
+- Normalisation is EXIF-rotated, fitted inside 2048x2048 without enlargement, JPEG quality 88. Inputs over 50 megapixels are rejected before decoding, and HEIC/HEIF is refused with an explanation rather than handed to the decoder.
+- An uploaded item is `queued`. Ingest never produces `extracting`, `needs_review`, `published` or `rejected`; extraction and review own those transitions. No surface may call an upload extracted, catalogued or saved to the archive — the only true status is queued.
+- Status values are exactly `queued | extracting | needs_review | published | rejected`.
+- Audit rows are append-only: ingest writes `ingest` for a new item and `duplicate_ingest` for a known hash, with actor and before/after JSON. No code path updates or deletes an audit row.
+- `POST /api/admin/ingest` answers 401 unauthenticated, 411 no declared length, 400 unreadable form, 413 over the limit, 422 undecodable or unsupported, 500 storage or config failure, 503 database busy after one retry, and 200 for queued or duplicate. Error bodies carry `{ code, message }` and never exception text.
+- The data directory is created and write-probed at boot; a directory that cannot be written stops the server instead of failing per request.
