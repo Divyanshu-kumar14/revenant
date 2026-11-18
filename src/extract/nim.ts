@@ -5,6 +5,7 @@ import {
   ExtractionError,
   extractionSchema,
   type Extraction,
+  type ExtractionResult,
   type ExtractInput,
   type Extractor,
 } from "./provider.ts";
@@ -81,7 +82,7 @@ export class NimExtractor implements Extractor {
     }
   }
 
-  async extract(input: ExtractInput): Promise<Extraction> {
+  async extract(input: ExtractInput): Promise<ExtractionResult> {
     const dataUri = `data:${input.mimeType};base64,${input.image.toString("base64")}`;
     const first = await this.complete([
       {
@@ -94,7 +95,7 @@ export class NimExtractor implements Extractor {
     ]);
 
     try {
-      return validate(first);
+      return { extraction: validate(first), raw: first, repaired: false, coerced: false };
     } catch (error) {
       const repaired = await this.complete([
         {
@@ -109,19 +110,21 @@ export class NimExtractor implements Extractor {
         },
       ]);
       try {
-        return validate(repaired);
+        return { extraction: validate(repaired), raw: repaired, repaired: true, coerced: false };
       } catch (secondError) {
         // Last resort, only after the repair call also failed: salvage a malformed
         // date or null list instead of losing the transcription. A coerced date is
         // marked by confidence.date = 0 so review sees it was not read from the item.
+        let salvaged: Extraction;
         try {
-          return coerce(repaired);
+          salvaged = coerceExtraction(repaired);
         } catch {
           throw new ExtractionError(
             "SCHEMA",
             `model output failed validation twice: ${describeError(secondError)}`,
           );
         }
+        return { extraction: salvaged, raw: repaired, repaired: true, coerced: true };
       }
     }
   }
@@ -260,8 +263,11 @@ const LIST_KEYS = ["people", "places", "subjects"] as const;
  * Re-validates a response whose only faults are a missing/invalid `date` or
  * null/non-array entity lists. Any other fault still throws, so content errors
  * are never hidden. A coerced date becomes unknown with confidence.date = 0.
+ *
+ * Exported so the proposal derived from a stored raw response can repeat the exact
+ * salvage the adapter applied; it needs no extractor, key or network.
  */
-function coerce(text: string): Extraction {
+export function coerceExtraction(text: string): Extraction {
   const parsed: unknown = JSON.parse(extractJsonObject(text));
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("response is not a JSON object");

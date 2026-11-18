@@ -90,10 +90,23 @@ export interface ExtractInput {
   mimeType: string;
 }
 
+/**
+ * What an extractor returns. `raw` is the provider's final response text exactly as received
+ * (after the adapter's trim), fences and formatting included: the first response, or the repair
+ * response when `repaired` is true. It is never a re-serialisation of `extraction`.
+ */
+export interface ExtractionResult {
+  extraction: Extraction;
+  raw: string;
+  /** The first response failed validation and the repair call's response was used. */
+  repaired: boolean;
+  /** The NIM adapter salvaged an invalid date or null lists after the repair response failed. */
+  coerced: boolean;
+}
 export interface Extractor {
   readonly model: string;
   readonly promptVersion: string;
-  extract(input: ExtractInput): Promise<Extraction>;
+  extract(input: ExtractInput): Promise<ExtractionResult>;
 }
 
 export interface GeminiOptions {
@@ -140,7 +153,7 @@ export class GeminiExtractor implements Extractor {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async extract(input: ExtractInput): Promise<Extraction> {
+  async extract(input: ExtractInput): Promise<ExtractionResult> {
     const first = await this.generate([
       {
         inline_data: {
@@ -152,7 +165,7 @@ export class GeminiExtractor implements Extractor {
     ]);
 
     try {
-      return validate(first);
+      return { extraction: validate(first), raw: first, repaired: false, coerced: false };
     } catch (error) {
       const issues = describeError(error);
       const repaired = await this.generate([
@@ -167,7 +180,7 @@ export class GeminiExtractor implements Extractor {
         },
       ]);
       try {
-        return validate(repaired);
+        return { extraction: validate(repaired), raw: repaired, repaired: true, coerced: false };
       } catch (secondError) {
         throw new ExtractionError(
           "SCHEMA",

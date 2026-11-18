@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     const began = Date.now();
     try {
       const image = await readFile(item.file);
-      const extraction = await extractor.extract({ image, mimeType: "image/jpeg" });
+      const { extraction } = await extractor.extract({ image, mimeType: "image/jpeg" });
       const record: ItemResult = {
         id: item.id,
         class: item.class,

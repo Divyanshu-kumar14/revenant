@@ -35,8 +35,10 @@ describe("NimExtractor date coercion", () => {
       date: { display: "Aug. 25, 1909", start: "1909-08-25", end: "1909-08-25", precision: "exact day" },
     });
 
-    const result = await extractor.extract(image);
+    const { extraction: result, repaired, coerced } = await extractor.extract(image);
 
+    expect(repaired).toBe(true);
+    expect(coerced).toBe(true);
     expect(result.date).toEqual({
       display: "Aug. 25, 1909",
       start: null,
@@ -57,7 +59,10 @@ describe("NimExtractor date coercion", () => {
       subjects: undefined,
     });
 
-    const result = await extractor.extract(image);
+    const { extraction: result, repaired, coerced } = await extractor.extract(image);
+
+    expect(repaired).toBe(true);
+    expect(coerced).toBe(true);
 
     expect(result.date).toEqual({ display: null, start: null, end: null, precision: "unknown" });
     expect(result.confidence.date).toBe(0);
