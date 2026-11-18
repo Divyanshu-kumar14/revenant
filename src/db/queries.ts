@@ -200,6 +200,13 @@ export function upsertRecord(db: DatabaseSync, record: NewRecord): void {
   );
 }
 
+/**
+ * Mark a record as no longer published. Zero rows changed is fine (a never-accepted item has no
+ * record). Field values and `reviewed_by` stay: who produced the record is still true.
+ */
+export function unpublishRecord(db: DatabaseSync, itemId: string): void {
+  db.prepare("UPDATE records SET published_at = NULL WHERE item_id = ?").run(itemId);
+}
 export function getRecord(db: DatabaseSync, itemId: string): RecordRow | null {
   const row = db.prepare("SELECT * FROM records WHERE item_id = ?").get(itemId);
   return (row as unknown as RecordRow | undefined) ?? null;

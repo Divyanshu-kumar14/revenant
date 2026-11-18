@@ -29,8 +29,10 @@ queued ──claim──> extracting ──ok──> needs_review ──accept�
 - `claim` is a single `UPDATE ... WHERE status='queued' RETURNING *` inside a transaction.
 - `accept` requires `status='needs_review'`; it writes `records` (upsert), sets `published_at`, sets status, writes audit, rebuilds the search row — one transaction.
 - `reject` sets `rejected` and clears `published_at`; the search row is deleted in the same transaction.
+- The search-row work named above lands with the archive spec, which creates `search_fts`; `reviewItem` today writes no search rows.
 - `reopen` is admin-only and returns `rejected` to `needs_review` with an audit event.
 - Any other transition throws `InvalidTransition`; the route maps it to `409`.
+- Invariant: `records.published_at IS NOT NULL` exactly when `items.status = 'published'`. The audit table is the only place publication history survives.
 
 ## Interfaces
 

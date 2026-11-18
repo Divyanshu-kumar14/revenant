@@ -5,7 +5,7 @@
 - [ ] 3. Implement `buildCitation` (`src/archive/citation.ts`) with omission rules. Verify: table tests for full, missing date, missing title, missing both.
 - [ ] 4. Build the item page (`src/app/items/[id]/page.tsx`): image, fields, entities, map link, provenance panel, rights, citation with copy button, `notFound()` for unpublished.
 - [ ] 5. Build the landing page (`src/app/page.tsx`): institution, search field, recent items, honest empty state.
-- [ ] 6. Create the FTS5 table and rebuild function (`src/archive/search.ts` + publish hook in `src/review/actions.ts`). Verify: publishing inserts exactly one row; rejecting deletes it.
+- [ ] 6. Create the FTS5 table and rebuild function (`src/archive/search.ts`) and own the search hooks in `src/review/actions.ts`: upsert the row on accept and edit, delete it on reject. Verify: accepting inserts exactly one row, editing rewrites it, rejecting deletes it.
 - [ ] 7. Implement `searchItems` ranking, escaping and pagination. Verify: exact-title first, FTS metacharacters do not throw, unpublished excluded.
 - [ ] 8. Implement decade, person and place facets over the filtered set. Verify: counts change correctly when a facet is applied.
 - [ ] 9. Build `/search` with a form, result list, facet links and an empty state that suggests removing a facet first.

@@ -42,6 +42,17 @@ function accept(db: Db, itemId: string, overrides: Partial<ReviewFields> = {}, a
   return reviewItem(db, { itemId, action: "accept", actor, fields: fields(overrides) }, clock);
 }
 
+function decide(
+  db: Db,
+  itemId: string,
+  action: "accept" | "edit" | "reject" | "reopen",
+  overrides: Partial<ReviewFields> = {},
+  actor = "admin",
+) {
+  const withFields = action === "accept" || action === "edit";
+  return reviewItem(db, { itemId, action, actor, ...(withFields ? { fields: fields(overrides) } : {}) }, clock);
+}
+
 interface AuditRow {
   action: string;
   actor: string;
@@ -206,6 +217,147 @@ describe("reviewItem accept", () => {
     expect(getItem(db, "i1")?.status).toBe("needs_review");
     expect(countRows(db, "records")).toBe(0);
     expect(auditRows(db, "i1")).toHaveLength(0);
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+function snapshot(db: Db, itemId: string) {
+  return {
+    records: countRows(db, "records"),
+    links: countRows(db, "item_entities"),
+    audit: auditRows(db, itemId).length,
+  };
+}
+
+function auditJson(db: Db, itemId: string, action: string) {
+  const row = auditRows(db, itemId).find((r) => r.action === action);
+  return {
+    before: JSON.parse(row?.before_json ?? "null") as { status: string; record: Record<string, unknown> | null },
+    after: JSON.parse(row?.after_json ?? "null") as { status: string; record: Record<string, unknown> | null },
+  };
+}
+
+describe("reviewItem edit", () => {
+  it("creates an unpublished record on a never-published item", () => {
+    const db = freshDb();
+    seed(db, "i1");
+
+    expect(decide(db, "i1", "edit", { title: "Draft title" }, "carol")).toEqual({ status: "needs_review" });
+
+    expect(getItem(db, "i1")?.status).toBe("needs_review");
+    expect(recordRow(db, "i1")).toMatchObject({ title: "Draft title", published_at: null, reviewed_by: "carol" });
+    const { before, after } = auditJson(db, "i1", "edit");
+    expect(before.record).toBeNull();
+    expect(after.record?.title).toBe("Draft title");
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("replaces entity links on a second edit", () => {
+    const db = freshDb();
+    seed(db, "i1");
+
+    decide(db, "i1", "edit", { people: [{ name: "Ada Lovelace", confidence: 0.9 }], places: [], subjects: [] });
+    decide(db, "i1", "edit", { people: [{ name: "Grace Hopper", confidence: 0.9 }], places: [], subjects: [] });
+
+    const links = db
+      .prepare("SELECT e.name FROM item_entities ie JOIN entities e ON e.id = ie.entity_id WHERE ie.item_id = ?")
+      .all("i1");
+    expect(links).toEqual([{ name: "Grace Hopper" }]);
+  });
+
+  it("keeps published_at null when editing after accept, reject and reopen", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    decide(db, "i1", "accept");
+    decide(db, "i1", "reject");
+    decide(db, "i1", "reopen");
+
+    decide(db, "i1", "edit", { title: "Corrected title" });
+
+    expect(recordRow(db, "i1")).toMatchObject({ title: "Corrected title", published_at: null });
+    const { before, after } = auditJson(db, "i1", "edit");
+    expect(before.record?.title).toBe("Mill pond at first light");
+    expect(after.record?.title).toBe("Corrected title");
+  });
+
+  it("throws 409 from published and leaves the stored title alone", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    decide(db, "i1", "accept");
+
+    const error = caught(() => decide(db, "i1", "edit", { title: "Changed" }));
+
+    expect(error).toMatchObject({ status: 409, code: "INVALID_TRANSITION" });
+    expect(recordRow(db, "i1")).toMatchObject({ title: "Mill pond at first light" });
+  });
+});
+
+describe("reviewItem reject", () => {
+  it("rejects a needs_review item without creating a record", () => {
+    const db = freshDb();
+    seed(db, "i1");
+
+    expect(decide(db, "i1", "reject")).toEqual({ status: "rejected" });
+
+    expect(getItem(db, "i1")?.status).toBe("rejected");
+    expect(recordRow(db, "i1")).toBeUndefined();
+    const { before, after } = auditJson(db, "i1", "reject");
+    expect(before).toEqual({ status: "needs_review", record: null });
+    expect(after).toEqual({ status: "rejected", record: null });
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("clears published_at and keeps the record's content and reviewer", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    decide(db, "i1", "accept", {}, "carol");
+
+    expect(decide(db, "i1", "reject", {}, "dave")).toEqual({ status: "rejected" });
+
+    expect(recordRow(db, "i1")).toMatchObject({
+      title: "Mill pond at first light",
+      reviewed_by: "carol",
+      published_at: null,
+    });
+    const { before, after } = auditJson(db, "i1", "reject");
+    expect(before.record?.published_at).toBe(NOW);
+    expect(after.record?.published_at).toBeNull();
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("reviewItem reopen", () => {
+  it("returns a rejected item to needs_review, keeping its error and record", () => {
+    const db = freshDb();
+    seed(db, "i1", "needs_review", "EXTRACT_FAILED");
+    decide(db, "i1", "edit");
+    decide(db, "i1", "reject");
+
+    expect(decide(db, "i1", "reopen")).toEqual({ status: "needs_review" });
+
+    expect(getItem(db, "i1")).toMatchObject({ status: "needs_review", error: "EXTRACT_FAILED" });
+    expect(recordRow(db, "i1")).toMatchObject({ published_at: null });
+    expect(auditJson(db, "i1", "reopen").after.status).toBe("needs_review");
+    expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("illegal sources for edit, reject and reopen", () => {
+  it.each([
+    ["edit", "published"],
+    ["reject", "queued"],
+    ["reopen", "needs_review"],
+  ] as const)("%s from %s throws 409 and writes nothing", (action, from) => {
+    const db = freshDb();
+    seed(db, "i1", from === "queued" ? "queued" : "needs_review");
+    if (from === "published") decide(db, "i1", "accept");
+    const before = snapshot(db, "i1");
+
+    const error = caught(() => decide(db, "i1", action));
+
+    expect(error).toMatchObject({ status: 409, code: "INVALID_TRANSITION" });
+    expect(snapshot(db, "i1")).toEqual(before);
+    expect(getItem(db, "i1")?.status).toBe(from);
     expect(db.isTransaction).toBe(false);
   });
 });
