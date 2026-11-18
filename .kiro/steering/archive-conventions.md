@@ -26,6 +26,8 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 | Open past | `before 1940` | `1800-01-01` | `1939-12-31` | `before` |
 | Open future | `after 1940` | `1941-01-01` | `{currentYear + 1}-12-31` | `after` |
 
+Also accepted beyond the table: `fall` as a season, displayed as `Autumn` (`Fall 1938` → `Autumn 1938`); ordinal days (`March 2nd, 1910`); and upper-case month names and abbreviations (`SEPT. 2, 1909` → `September 2, 1909`).
+
 ### Rules
 
 1. Unknown or unparseable input yields `null` start and end, precision `unknown`, and `date_display` equal to the trimmed original. Never substitute today's date, the ingest date or the file's modification time.
@@ -33,7 +35,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 3. `date_start <= date_end` always. If a range would invert, it is unknown.
 4. Seasons are northern-hemisphere calendar seasons: spring Mar 1–May 31, summer Jun 1–Aug 31, autumn Sep 1–Nov 30, winter Dec 1–Feb 28/29 of the following year.
 5. Circa is a window of ±5 years around the stated year.
-6. Two-digit years use a pivot of 30: `00`–`30` → 2000–2030, `31`–`99` → 1931–1999. Every two-digit year is marked `ambiguous: true` for the reviewer. When a structured date and display text arrive together, the structured date wins; if parsing the display text disagrees with it, mark the field ambiguous rather than choosing.
+6. Two-digit years use a pivot of 30: `00`–`30` → 2000–2030, `31`–`99` → 1931–1999. Every two-digit year is marked `ambiguous: true` for the reviewer. When a structured date and display text arrive together, the structured date wins; if parsing the display text disagrees with it, mark the field ambiguous rather than choosing. Two-digit apostrophe years (`Summer '38`, `March '38`) are deliberately not parsed: the table does not define them and guessing would violate rule 1. They return unknown with the trimmed original.
 7. Numeric dates: if the first component is greater than 12 it must be a day (`25/12/1938` → 1938-12-25). Otherwise interpret as US `M/D/Y`. When both first and second components are `<= 12`, set `ambiguous: true`; do not silently pick a convention.
 8. A year alone never gains a month or day. A month alone never gains a year.
 9. `date_display` is normalised, not copied: exact day → `December 25, 1938`; month → `March 1938`; year → `1938`; decade → `1930s`; circa → `ca. 1900`; season → `Summer 1938`; range → `1935–1939` with an en dash; open → `before 1940` / `after 1940`.
@@ -45,7 +47,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 `display_name` is what a person reads; `name_key` is what the database matches on.
 
 - `displayName`: Unicode NFKC, trim, collapse internal whitespace, strip a matched pair of quotation marks or brackets that wraps the whole name, preserve diacritics and non-Latin scripts. Keep internal punctuation, initials and abbreviations such as `J.` and `Jr.`; never strip a trailing full stop or comma. NFKC may fold ligatures and width variants (`ﬁ` → `fi`, `Ａ` → `A`), which is intended. Never strip accents; never transliterate. `Müller` stays `Müller`, `李 小龙` stays `李 小龙`. `İstanbul` and `Istanbul` intentionally produce different keys, because case mapping is locale-independent.
-- `nameKey`: apply `displayName`, lowercase with a locale-independent lowercase, collapse whitespace around commas to `, `, keep diacritics. Idempotent.
+- `nameKey`: apply `displayName`, lowercase with a locale-independent lowercase, collapse whitespace around commas to `, `, keep diacritics. Idempotent. The key also folds typographic apostrophes (U+2018, U+2019, U+02BC, U+02B9 → U+0027) and hyphen and dash variants (U+2010–U+2015 → U+002D): `(type, name_key)` is unique, so without the folds `O’Brien` and `O'Brien` would enter one person twice. `displayName` keeps the characters as written.
 - Identity: `(type, name_key)` is unique. Do not merge `J. Smith` with `John Smith`, do not expand nicknames, do not infer gender, do not add honorifics the source does not contain.
 - Types are exactly `person`, `place`, `subject`.
 - A name may be recorded only if it appears in the transcription, the supplied caption, or the item's existing metadata. The extractor must never invent a plausible name to fill a field.

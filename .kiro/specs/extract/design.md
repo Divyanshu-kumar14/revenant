@@ -11,7 +11,7 @@ The evidence base is ADR 0001: one NIM base run of 20 items plus five single-ite
 ## Components
 
 ```
-src/normalize/date.ts               normalizeDate(), proposeDate(): archive conventions §1
+src/normalize/date.ts               normalizeDate(): archive conventions §1
 src/normalize/names.ts              displayName(), nameKey(): archive conventions §2
 src/extract/provider.ts             Extractor, ExtractionResult, ExtractionError, extractionSchema, GeminiExtractor (exists)
 src/extract/nim.ts                  NimExtractor (exists); its date salvage is exported for deriveProposal
@@ -54,18 +54,18 @@ export interface Extractor {
 }
 
 // src/normalize/date.ts
-export interface ProposedDate {
+export interface NormalizedDate {
   display: string | null;    // rendered per §1 rule 9, or the trimmed original when unknown
   start: string | null;      // YYYY-MM-DD
   end: string | null;        // YYYY-MM-DD
   precision: Precision;      // from PRECISIONS
   ambiguous: boolean;        // two-digit year, undecidable D/M, or display disagrees with structured
 }
-export function normalizeDate(raw: string | null, now?: Date): ProposedDate;   // display text only
-export function proposeDate(
-  date: { display: string | null; start: string | null; end: string | null; precision: Precision },
+export function normalizeDate(
+  input: string | null | undefined,
+  structured?: { start?: string | null; end?: string | null; precision?: Precision },
   now?: Date,
-): ProposedDate;                                                                // structured first
+): NormalizedDate;
 
 // src/normalize/names.ts
 export function displayName(raw: string): string;
@@ -80,7 +80,7 @@ export interface Proposal {
   title: string | null;
   description: string | null;
   transcription: string | null;
-  date: ProposedDate;
+  date: NormalizedDate;
   people: ProposedEntity[];
   places: ProposedEntity[];
   subjects: ProposedEntity[];
@@ -91,8 +91,10 @@ export type ExtractOutcome =
   | { itemId: string; status: "extracted"; extractionId: string; model: string; promptVersion: string; latencyMs: number }
   | { itemId: string; status: "failed"; code: FailureCode }
   | { itemId: string; status: "not_claimed"; current: ItemStatus | null };
+export interface ClaimedItem { id: string; storedPath: string }   // storedPath relative to the data directory
+export type ExtractDb = Parameters<typeof writeAudit>[0];        // so only src/db/ imports node:sqlite
 export interface ExtractDeps {
-  db: DatabaseSync;
+  db: ExtractDb;
   dataDir: string;
   extractor: Extractor;
   actor: string;              // "cli" for the script, the session actor for the route
@@ -103,15 +105,16 @@ export async function extractClaimed(item: ClaimedItem, deps: ExtractDeps): Prom
 export function deriveProposal(rawJson: string, now?: Date): Proposal;
 
 // src/jobs/extract.ts
-export interface ClaimedItem { id: string; storedPath: string }
 export interface BatchSummary {
   requeued: number; claimed: number; extracted: number; failed: number; queued: number;
   outcomes: ExtractOutcome[];
 }
-export function requeueStale(db: DatabaseSync, actor: string, now: Date): string[];
-export function claim(db: DatabaseSync, actor: string, now: Date, itemId?: string): ClaimedItem | null;
+export function requeueStale(db: ExtractDb, actor: string, now: Date): string[];
+export function claim(db: ExtractDb, actor: string, now: Date, itemId?: string): ClaimedItem | null;
 export async function runBatch(deps: ExtractDeps, options: { limit: number; itemId?: string }): Promise<BatchSummary>;
 ```
+
+Task 1 shipped one `normalizeDate` in place of the planned `normalizeDate` and `proposeDate` pair: valid structured dates still win, and the display text only decides `ambiguous`.
 
 The `ExtractionResult` change is to an internal interface, but it is not local. It touches both adapters (`GeminiExtractor` and `NimExtractor` return the text they validated and the two flags), the spike script (`scripts/spike-accuracy.ts` reads `.extraction` from the result), and `tests/unit/nim-coerce.test.ts`. Eval-run files written before the change are unaffected.
 
@@ -222,7 +225,7 @@ There is no retry queue. The adapters already retry rate limits, 5xx and timeout
 `raw_json` holds the model's final response text exactly as received. `deriveProposal(rawJson, now)` computes the proposal from it every time it is needed:
 
 1. Extract the JSON object from the text and validate it with `extractionSchema`. If validation fails, apply the same date salvage `NimExtractor` applied when it accepted the response; the function is exported from `nim.ts` and shared, so the two cannot diverge. A salvaged date is precision `unknown` with `confidence.date = 0`, and its display text is not parsed into a date (§3). Coercion refuses a response that contains none of the schema's fields, such as a provider error body, so it cannot masquerade as an empty extraction.
-2. Run `proposeDate` on the date object. Structured `start`, `end` and `precision` are primary: when they are valid under §1 (real `YYYY-MM-DD` dates, years within `1800..currentYear + 1`, `start <= end`, precision other than `unknown`), they are kept and `display` is rendered from them per rule 9. The display text is parsed with `normalizeDate` only to compare: if its parse yields a known precision whose start or end year differs from the structured one, `ambiguous` is set. When the structured fields are absent or invalid, `normalizeDate` on the display text is the proposal.
+2. Run `normalizeDate(display, { start, end, precision }, now)` on the date object. Structured `start`, `end` and `precision` are primary: when they are valid under §1 (real `YYYY-MM-DD` dates, years within `1800..currentYear + 1`, `start <= end`, precision other than `unknown`), they are kept and `display` is rendered from them per rule 9. The display text is parsed only to compare: if its parse yields a known precision whose start or end year differs from the structured one, `ambiguous` is set. When the structured fields are absent or invalid, the parse of the display text is the proposal.
 3. Run `displayName` and `nameKey` on every person, place and subject; drop exact `nameKey` duplicates within a type, keeping the higher confidence.
 4. Pass title, description, transcription and confidence through unchanged.
 
@@ -230,7 +233,7 @@ The gate case: ADR 0001 row 11 returned display `3-2-10` with start and end `191
 
 The trade-off, stated:
 
-- **Gained.** One stored copy, so the raw output and the proposal cannot disagree. Provenance shows exactly what the model said beside what the archive proposed. A fix to `proposeDate` or `nameKey` applies to every unreviewed extraction without a data migration.
+- **Gained.** One stored copy, so the raw output and the proposal cannot disagree. Provenance shows exactly what the model said beside what the archive proposed. A fix to `normalizeDate` or `nameKey` applies to every unreviewed extraction without a data migration.
 - **Paid.** The proposal is recomputed on every review read; it is pure and costs microseconds, but it is not free. A normaliser change also changes the proposal shown for an extraction made before the change. What a reviewer accepted does not move: `records` is written at accept time and the audit row snapshots it. Unreviewed proposals cannot be queried in SQL, which costs nothing today because no public surface reads them.
 - **Constraint.** `deriveProposal` must stay pure and must accept every `raw` an adapter accepted. It takes `now` as a parameter, because the upper year bound is `currentYear + 1`.
 
@@ -257,7 +260,7 @@ ADR 0001 measured `nim`, so `VISION_PROVIDER` defaults to `nim` and `.env.exampl
 ## Testing
 
 - Unit, no network: the runner and `extractClaimed` run against `FixtureExtractor` and an `Extractor` test double that throws a chosen error. `tests/unit/setup.ts` already fails any test that calls `fetch`.
-- Table tests for `normalizeDate` (every row of the §1 accepted-inputs table, bounds, inversion, pivot, D/M ambiguity) and `proposeDate` (structured valid, structured invalid, structured absent, display disagreeing, the `3-2-10` gate case), and for `displayName` and `nameKey` (`Müller`, `李 小龙`, wrapping punctuation, whitespace).
+- Table tests for `normalizeDate` (every row of the §1 accepted-inputs table, bounds, inversion, pivot, D/M ambiguity) with structured fields (valid, invalid, absent, display disagreeing, the `3-2-10` gate case), and for `displayName` and `nameKey` (`Müller`, `李 小龙`, wrapping punctuation, whitespace).
 - Property tests (`fast-check`): `normalizeDate` display idempotency (§1 rule 10); `start <= end` whenever both are non-null, for both date functions; every non-null year within bounds; `displayName` and `nameKey` idempotent; `nameKey(displayName(x)) === nameKey(x)`; combining marks survive `nameKey`.
 - Adapters: with an injected `fetchImpl`, `raw` equals the response text byte for byte, `repaired` is true only when the repair call ran, and `coerced` is true only when the salvage ran.
 - Claim: two connections to one temporary database file race on one queued item; the extractor is called once.

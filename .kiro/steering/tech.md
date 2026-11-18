@@ -29,7 +29,7 @@ Never claim a change works without running the narrowest relevant command and re
 ## Data
 
 - SQLite through `node:sqlite` (`DatabaseSync`). No ORM, no query builder. SQL lives in `src/db/`.
-- WAL mode; `PRAGMA foreign_keys=ON`; migrations are idempotent `CREATE ... IF NOT EXISTS` statements and must be safe to run twice.
+- WAL mode; `PRAGMA foreign_keys=ON`; migrations are idempotent `CREATE ... IF NOT EXISTS` statements and must be safe to run twice. One exception exists: `CREATE TABLE IF NOT EXISTS` cannot add a column to an existing table, so `migrate()` adds `extractions.prompt_version` with an `ALTER TABLE` guarded by `PRAGMA table_info`, which is safe to run repeatedly. Any future column addition follows the same pattern.
 - Database at `$REVENANT_DATA_DIR/revenant.db`; uploads at `$REVENANT_DATA_DIR/uploads/<sha256>.jpg`; default `./data`.
 - `items.sha256` is unique. Re-ingesting identical bytes returns the existing item and writes an audit event; it never creates a second item.
 - An item is publicly visible only when `status = 'published'`. Every status transition writes to `audit_events`.
@@ -38,8 +38,8 @@ Never claim a change works without running the narrowest relevant command and re
 
 ## Extraction
 
-- All model access sits behind the `Extractor` interface in `src/extract/types.ts`. Route handlers, jobs and UI never call a provider directly.
-- Unit tests use `FixtureExtractor` and must not touch the network. `tests/unit/setup.ts` fails a test that calls `fetch`.
+- All model access sits behind the `Extractor` interface in `src/extract/provider.ts`. Route handlers, jobs and UI never call a provider directly.
+- Unit tests use `FixtureExtractor`, which returns one fixed, obviously fake extraction (title "Fixture: mill pond at first light", model `fixture`, prompt version `fixture`) for every input and reads no image. Unit tests must not touch the network. `tests/unit/setup.ts` fails a test that calls `fetch`.
 - Malformed JSON, schema violations and timeouts become `ExtractionError` with a typed code. The item goes to `needs_review` with the error visible; no `records` row is written and nothing is published.
 - Prompts are versioned files (`src/extract/prompt.ts`) so an eval run can name the prompt it used.
 
