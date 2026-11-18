@@ -33,7 +33,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 3. `date_start <= date_end` always. If a range would invert, it is unknown.
 4. Seasons are northern-hemisphere calendar seasons: spring Mar 1–May 31, summer Jun 1–Aug 31, autumn Sep 1–Nov 30, winter Dec 1–Feb 28/29 of the following year.
 5. Circa is a window of ±5 years around the stated year.
-6. Two-digit years use a pivot of 30: `00`–`30` → 2000–2030, `31`–`99` → 1931–1999. Every two-digit year is marked `ambiguous: true` for the reviewer.
+6. Two-digit years use a pivot of 30: `00`–`30` → 2000–2030, `31`–`99` → 1931–1999. Every two-digit year is marked `ambiguous: true` for the reviewer. When a structured date and display text arrive together, the structured date wins; if parsing the display text disagrees with it, mark the field ambiguous rather than choosing.
 7. Numeric dates: if the first component is greater than 12 it must be a day (`25/12/1938` → 1938-12-25). Otherwise interpret as US `M/D/Y`. When both first and second components are `<= 12`, set `ambiguous: true`; do not silently pick a convention.
 8. A year alone never gains a month or day. A month alone never gains a year.
 9. `date_display` is normalised, not copied: exact day → `December 25, 1938`; month → `March 1938`; year → `1938`; decade → `1930s`; circa → `ca. 1900`; season → `Summer 1938`; range → `1935–1939` with an en dash; open → `before 1940` / `after 1940`.
