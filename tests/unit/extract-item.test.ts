@@ -1,12 +1,18 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { migrate, openDb } from "@/db/client";
 import { countRows, getItem, insertItem } from "@/db/queries";
 import { deriveProposal, extractClaimed, type ExtractDb } from "@/extract/extract-item";
 import { FixtureExtractor } from "@/extract/fixture";
-import type { ExtractInput, ExtractionResult, Extractor } from "@/extract/provider";
+import {
+  ExtractionError,
+  type ExtractInput,
+  type ExtractionErrorCode,
+  type ExtractionResult,
+  type Extractor,
+} from "@/extract/provider";
 import { claim } from "@/jobs/extract";
 
 const NOW = new Date("2026-11-18T12:00:00.000Z");
@@ -195,5 +201,133 @@ describe("extractClaimed", () => {
     expect(countRows(db, "extractions")).toBe(0);
     expect(auditRows(db, item.id).map((row) => row.action)).toEqual(["extract_started"]);
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+/** Throws what it is given, so every failure path is reachable without a provider. */
+class ThrowingExtractor implements Extractor {
+  readonly model = "fixture";
+  readonly promptVersion = "fixture";
+  private readonly error: unknown;
+
+  constructor(error: unknown) {
+    this.error = error;
+  }
+
+  async extract(): Promise<ExtractionResult> {
+    throw this.error;
+  }
+}
+
+const FAILURE_CODES: ExtractionErrorCode[] = [
+  "NO_KEY",
+  "AUTH",
+  "RATE_LIMIT",
+  "TIMEOUT",
+  "HTTP",
+  "SCHEMA",
+  "PROVIDER",
+  "BLOCKED",
+  "CONFIG",
+];
+
+describe("failure handling", () => {
+  it.each(FAILURE_CODES)("maps %s to needs_review with that code and no extraction row", async (code) => {
+    const { db, dataDir } = setup();
+    const item = addItem(db, dataDir, "item-1");
+    const claimed = claim(db, "cli", NOW);
+    if (!claimed) throw new Error("expected a claim");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const outcome = await extractClaimed(claimed, {
+      db,
+      dataDir,
+      extractor: new ThrowingExtractor(new ExtractionError(code, "provider said: secret body")),
+      actor: "cli",
+      now: clock,
+    });
+
+    expect(outcome).toEqual({ itemId: item.id, status: "failed", code });
+    expect(getItem(db, item.id)).toMatchObject({ status: "needs_review", error: code });
+    expect(countRows(db, "extractions")).toBe(0);
+
+    const rows = auditRows(db, item.id);
+    expect(rows.map((row) => row.action)).toEqual(["extract_started", "extract_failed"]);
+    expect(JSON.parse(rows[1].after_json ?? "null")).toEqual({ status: "needs_review", error: code });
+    // The message never reaches the database or the log; only the id, code and error name do.
+    expect(rows[1].after_json).not.toContain("secret");
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("secret");
+    expect(JSON.stringify(logged.mock.calls)).toContain(code);
+    logged.mockRestore();
+  });
+
+  it("maps a missing upload file to INTERNAL", async () => {
+    const { db, dataDir } = setup();
+    const item = addItem(db, dataDir, "item-2");
+    const claimed = claim(db, "cli", NOW);
+    if (!claimed) throw new Error("expected a claim");
+    unlinkSync(join(dataDir, item.storedPath));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const outcome = await extractClaimed(claimed, {
+      db,
+      dataDir,
+      extractor: new FixtureExtractor(),
+      actor: "cli",
+      now: clock,
+    });
+
+    expect(outcome).toEqual({ itemId: item.id, status: "failed", code: "INTERNAL" });
+    expect(getItem(db, item.id)).toMatchObject({ status: "needs_review", error: "INTERNAL" });
+    expect(countRows(db, "extractions")).toBe(0);
+    expect(auditRows(db, item.id).map((row) => row.action)).toEqual(["extract_started", "extract_failed"]);
+    logged.mockRestore();
+  });
+
+  it("maps a non-ExtractionError from the adapter to INTERNAL", async () => {
+    const { db, dataDir } = setup();
+    const item = addItem(db, dataDir, "item-3");
+    const claimed = claim(db, "cli", NOW);
+    if (!claimed) throw new Error("expected a claim");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const outcome = await extractClaimed(claimed, {
+      db,
+      dataDir,
+      extractor: new ThrowingExtractor(new TypeError("undefined is not a function")),
+      actor: "cli",
+      now: clock,
+    });
+
+    expect(outcome).toEqual({ itemId: item.id, status: "failed", code: "INTERNAL" });
+    expect(getItem(db, item.id)).toMatchObject({ status: "needs_review", error: "INTERNAL" });
+    logged.mockRestore();
+  });
+
+  it("maps a failed success-path finish to INTERNAL and finishes in a new transaction", async () => {
+    const { db, dataDir } = setup();
+    const item = addItem(db, dataDir, "item-4");
+    const claimed = claim(db, "cli", NOW);
+    if (!claimed) throw new Error("expected a claim");
+    // The success finish inserts into extractions; make exactly that statement fail.
+    db.exec(
+      "CREATE TRIGGER fail_extractions BEFORE INSERT ON extractions BEGIN SELECT RAISE(ABORT, 'disk full'); END;",
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const outcome = await extractClaimed(claimed, {
+      db,
+      dataDir,
+      extractor: new FixtureExtractor(),
+      actor: "cli",
+      now: clock,
+    });
+
+    expect(outcome).toEqual({ itemId: item.id, status: "failed", code: "INTERNAL" });
+    expect(getItem(db, item.id)).toMatchObject({ status: "needs_review", error: "INTERNAL" });
+    expect(countRows(db, "extractions")).toBe(0);
+    expect(auditRows(db, item.id).map((row) => row.action)).toEqual(["extract_started", "extract_failed"]);
+    expect(db.isTransaction).toBe(false);
+    logged.mockRestore();
   });
 });

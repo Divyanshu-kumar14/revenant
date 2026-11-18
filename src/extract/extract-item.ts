@@ -103,13 +103,21 @@ export function createExtractor(env: NodeJS.ProcessEnv): Extractor {
 }
 
 /**
- * Extracts one claimed item: reads its upload, calls the model with no transaction open, then
- * finishes in one `BEGIN IMMEDIATE` transaction that writes the `extractions` row, moves the item
- * to `needs_review` and writes the `extract` audit row. If the item is no longer `extracting` at
- * the finish, nothing is written and the outcome is `not_claimed`. Errors from reading the file
- * or from the extractor propagate unchanged; mapping them to a failure code is the caller's job.
+ * Extracts one claimed item and always reports an outcome: a success, a failure with its code, or
+ * `not_claimed` when the item left `extracting` before the finish. Errors from reading the upload,
+ * from the extractor and from the success-path transaction all reach `finishFailure`, which runs in
+ * a transaction of its own, so no failure reaches review without a code.
  */
 export async function extractClaimed(item: ClaimedItem, deps: ExtractDeps): Promise<ExtractOutcome> {
+  try {
+    return await extractOnce(item, deps);
+  } catch (error) {
+    return finishFailure(item, deps, error);
+  }
+}
+
+/** The success path; any throw is mapped to a failure code by `extractClaimed`. */
+async function extractOnce(item: ClaimedItem, deps: ExtractDeps): Promise<ExtractOutcome> {
   const { db, extractor, actor } = deps;
   const clock = deps.now ?? (() => new Date());
   const image = await readFile(join(deps.dataDir, item.storedPath));
@@ -166,6 +174,51 @@ export async function extractClaimed(item: ClaimedItem, deps: ExtractDeps): Prom
   } catch (error) {
     rollbackQuietly(db);
     throw error;
+  }
+}
+
+/** An `ExtractionError` code is stored as it is; anything else is `INTERNAL`. */
+function failureCode(error: unknown): FailureCode {
+  return error instanceof ExtractionError ? error.code : "INTERNAL";
+}
+
+/**
+ * Move a failed item to `needs_review` with its code, in a transaction of its own: the success path
+ * may have failed with one still open. Writes no `extractions` row and exactly one `extract_failed`
+ * audit row. Never throws, so one failure cannot stop a batch; if this transaction also fails the
+ * item stays `extracting` and the next run's stale requeue returns it to `queued`. Only the id, the
+ * code and, for `INTERNAL`, the error name are logged: messages can carry provider bodies and paths.
+ */
+function finishFailure(item: ClaimedItem, deps: ExtractDeps, error: unknown): ExtractOutcome {
+  const { db, actor } = deps;
+  const code = failureCode(error);
+  const at = (deps.now ?? (() => new Date()))().toISOString();
+  const name = error instanceof Error ? error.name : typeof error;
+  console.error(`extract ${item.id} failed: ${code}${code === "INTERNAL" ? ` (${name})` : ""}`);
+
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    if (
+      transitionItem(db, { id: item.id, from: "extracting", to: "needs_review", error: code, at }) === 0
+    ) {
+      db.exec("ROLLBACK");
+      return { itemId: item.id, status: "not_claimed", current: getItem(db, item.id)?.status ?? null };
+    }
+    writeAudit(db, {
+      itemId: item.id,
+      actor,
+      action: "extract_failed",
+      before: { status: "extracting" },
+      after: { status: "needs_review", error: code },
+      at,
+    });
+    db.exec("COMMIT");
+    return { itemId: item.id, status: "failed", code };
+  } catch (finishError) {
+    rollbackQuietly(db);
+    const finishName = finishError instanceof Error ? finishError.name : typeof finishError;
+    console.error(`extract ${item.id} failure finish failed: ${finishName}; left to the stale requeue`);
+    return { itemId: item.id, status: "failed", code };
   }
 }
 
