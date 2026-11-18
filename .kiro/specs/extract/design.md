@@ -32,10 +32,12 @@ Why the modules sit where they do:
 
 Two constraints, fixed here:
 
-- **Relative `.ts` imports on the runner's chain only.** `scripts/extract.ts` runs under plain `node`, which resolves neither the `@/` alias nor extensionless relative imports. Every module the script loads, directly or transitively, imports with relative specifiers and an explicit `.ts`, as `nim.ts` already does: `src/jobs/extract.ts`, `src/extract/extract-item.ts`, `fixture.ts`, `provider.ts`, `nim.ts`, `prompt.ts`, `src/normalize/*`, `src/db/client.ts` (today it imports `@/data-dir`), `src/db/queries.ts` (today it imports `./types`) and `src/data-dir.ts`. Modules off that chain keep the `@/` alias. `tsconfig.json` already sets `allowImportingTsExtensions`.
+- *`tsx` loads the scripts, so `@/` stays everywhere.** `scripts/extract.ts` runs as `node --env-file-if-exists=.env.local --import tsx scripts/extract.ts`; the `tsx` loader resolves both the `@/` alias and extensionless relative imports, verified on this repo. No module changes its import style for the runner, `src/db/client.ts` keeps `@/data-dir`, and `src/db/queries.ts` keeps `./types`. `tsconfig.json` keeps `allowImportingTsExtensions` because `scripts/spike-accuracy.ts` still uses explicit `.ts` specifiers under plain `node`; that script is unchanged.
 - **`MAX_BATCH = 5`.** Five extractions take roughly 75 seconds: successful items in the NIM base run (`eval-runs/spike-20261117T215437Z.json`, 15 items) took a median of 14.5 s each. Five also bounds the token spend one click can cause.
 
 ## Interfaces
+
+`deriveProposal` parses `raw_json` with the same fence-stripping the adapters use before validation. That helper is exported once from `src/extract/provider.ts` and used by the Gemini adapter, the NIM adapter and `deriveProposal`; it is not copied a third time.
 
 ```ts
 // src/extract/provider.ts — changed: extract() returns ExtractionResult instead of Extraction
