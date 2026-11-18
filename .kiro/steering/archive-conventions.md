@@ -70,7 +70,7 @@ Store `date_start` and `date_end` as ISO `YYYY-MM-DD` strings, `date_display` as
 
 - Every published item carries a rights line. Accepted forms: `No known copyright restrictions.` or the institution's supplied statement. Never assert public domain without a source.
 - Provenance is mandatory and visible: `sha256`, original file name, model identifier, prompt version, extraction timestamp, reviewer, publication timestamp.
-- The source file is never modified or deleted after ingest. Normalised derivatives may be regenerated.
+- Only the normalised JPEG — longest side 2048 px, quality 88 — is retained; the uploaded original is discarded after normalisation. The retained copy is never modified or deleted after ingest, and every derivative, whether thumbnail, crop or display size, is regenerated from it.
 
 ## 6. Dublin Core export
 
@@ -105,9 +105,9 @@ Public identifiers are `RVN-` followed by a zero-padded sequence (`RVN-0001`). I
 ## 9. Ingest
 
 - Identity is the normalised pixels, not the upload: `sha256` is computed over the normalised JPEG, so two files that normalise to the same bytes are one item whatever their names or formats. The stored copy is `uploads/<sha256>.jpg` relative to the data directory.
-- Normalisation is EXIF-rotated, fitted inside 2048x2048 without enlargement, JPEG quality 88. Inputs over 50 megapixels are rejected before decoding, and HEIC/HEIF is refused with an explanation rather than handed to the decoder.
+- Normalisation is EXIF-rotated, fitted inside 2048x2048 without enlargement, JPEG quality 88. Inputs over 50 megapixels are rejected before decoding, and files that declare a HEIF brand (`heic`, `heix`, `hevc`, `hevx`) in the `ftyp` box, as major or compatible brand, are refused with an explanation rather than handed to the decoder.
 - An uploaded item is `queued`. Ingest never produces `extracting`, `needs_review`, `published` or `rejected`; extraction and review own those transitions. No surface may call an upload extracted, catalogued or saved to the archive — the only true status is queued.
 - Status values are exactly `queued | extracting | needs_review | published | rejected`.
 - Audit rows are append-only: ingest writes `ingest` for a new item and `duplicate_ingest` for a known hash, with actor and before/after JSON. No code path updates or deletes an audit row.
-- `POST /api/admin/ingest` answers 401 unauthenticated, 411 no declared length, 400 unreadable form, 413 over the limit, 422 undecodable or unsupported, 500 storage or config failure, 503 database busy after one retry, and 200 for queued or duplicate. Error bodies carry `{ code, message }` and never exception text.
-- The data directory is created and write-probed at boot; a directory that cannot be written stops the server instead of failing per request.
+- `POST /api/admin/ingest` answers 401 unauthenticated, 411 no declared length, 400 for a form that cannot be read or fails validation, 413 over the limit, 422 undecodable or unsupported, 500 for a storage, configuration or unexpected failure, 503 database busy after one retry, and 200 for queued or duplicate. Error bodies carry `{ code, message }` and never exception text.
+- The data directory is created and write-probed at boot, so a directory that cannot be written stops the server. The upload route repeats the check when it first opens the database; a directory that turns unwritable after boot fails the upload with 500.
