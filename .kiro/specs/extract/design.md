@@ -150,7 +150,7 @@ Audit rows, all with the run's actor:
 | Action | Written in | `before_json` | `after_json` |
 |---|---|---|---|
 | `extract_started` | claim transaction | `{ status: "queued" }` | `{ status: "extracting" }` |
-| `extract` | finish transaction | `{ status: "extracting" }` | `{ status: "needs_review", extractionId, model, promptVersion, repaired, coerced }` |
+| `extract` | finish transaction | `{ status: "extracting" }` | `{ status: "needs_review", extractionId, model, promptVersion, latencyMs, repaired, coerced }` |
 | `extract_failed` | finish transaction | `{ status: "extracting" }` | `{ status: "needs_review", error: code }` |
 | `extract_interrupted` | requeue transaction | `{ status: "extracting", since: updated_at }` | `{ status: "queued" }` |
 
@@ -165,12 +165,14 @@ BEGIN IMMEDIATE                                   ← requeueStale, once per run
 COMMIT
 
 BEGIN IMMEDIATE                                   ← claim
-  UPDATE items SET status = 'extracting', error = NULL, updated_at = :now
-   WHERE id = (SELECT id FROM items WHERE status = 'queued' ORDER BY created_at, id LIMIT 1)
-     AND status = 'queued'
-  RETURNING id, stored_path
+  SELECT id, stored_path FROM items
+   WHERE status = 'queued' ORDER BY created_at, id LIMIT 1
   -- --item=<id> uses: WHERE id = :id AND status = 'queued'
-  INSERT audit_events 'extract_started'           ← only when a row was returned
+  no row    ⇒ ROLLBACK, return null: queue empty, or that item is not queued
+  UPDATE items SET status = 'extracting', error = NULL, updated_at = :now
+   WHERE id = :id AND status = 'queued'
+  zero changed rows ⇒ ROLLBACK, return null: another run owns it
+  INSERT audit_events 'extract_started'           ← only after the row moved
 COMMIT
   zero rows  ⇒ another run owns it, or the queue is empty: no model call
   one row    ⇒ read uploads/<sha256>.jpg
@@ -189,7 +191,7 @@ COMMIT
 
 - `BEGIN IMMEDIATE` takes the write lock before the `UPDATE` reads, so two runs serialise on the claim and the second sees the item as no longer `queued`. No lock file, no claims table.
 - The model call sits between the claim and the finish. A slow or retrying provider never blocks ingest or review writes.
-- `SQLITE_BUSY` on any `BEGIN IMMEDIATE` is retried once after 50 ms, as ingest does; a second `BUSY` at the claim ends the run with that item unclaimed.
+- `SQLITE_BUSY` is not retried inside the claim. A `BEGIN IMMEDIATE` that fails with `BUSY` propagates to the caller: the CLI exits non-zero, and the admin route answers 503 the way the ingest route does.
 - `createExtractor()` runs once per run, before `requeueStale` and the first claim. A missing key or a Google base URL for NIM stops the run with every item still `queued`.
 - **Fifteen minutes is above the worst case for one live claim.** `NimExtractor` makes at most two calls per item (first and repair), each up to three attempts of 60 s with up to 30 s backoff between attempts: 2 × (3 × 60 + 2 × 30) = 480 s. `GeminiExtractor` is lower. A requeue therefore only catches an item whose process is gone, never one still being extracted. The runner extracts items one at a time, and each claim sets `updated_at`, so the bound applies per item, not per batch.
 

@@ -26,3 +26,15 @@ export function migrate(db: DatabaseSync): void {
     db.exec("ALTER TABLE extractions ADD COLUMN prompt_version TEXT NOT NULL DEFAULT 'v1'");
   }
 }
+
+/**
+ * Roll back if a transaction is still open. A failing ROLLBACK is ignored so the caller's
+ * original error is the one that propagates, never the rollback's.
+ */
+export function rollbackQuietly(db: DatabaseSync): void {
+  try {
+    if (db.isTransaction) db.exec("ROLLBACK");
+  } catch {
+    // Ignored on purpose: the original error is more useful than the rollback's.
+  }
+}

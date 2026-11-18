@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getItem, writeAudit } from "@/db/queries";
+import { rollbackQuietly } from "@/db/client";
+import { getItem, insertExtraction, transitionItem, writeAudit } from "@/db/queries";
 import type { ItemStatus } from "@/db/types";
 import { normalizeDate, type NormalizedDate } from "@/normalize/date";
 import { displayName, nameKey } from "@/normalize/names";
@@ -121,20 +122,22 @@ export async function extractClaimed(item: ClaimedItem, deps: ExtractDeps): Prom
 
   db.exec("BEGIN IMMEDIATE");
   try {
-    const moved = db
-      .prepare(
-        "UPDATE items SET status = 'needs_review', error = NULL, updated_at = ? WHERE id = ? AND status = 'extracting'",
-      )
-      .run(at, item.id);
-    if (Number(moved.changes) === 0) {
+    if (
+      transitionItem(db, { id: item.id, from: "extracting", to: "needs_review", error: null, at }) === 0
+    ) {
       db.exec("ROLLBACK");
       return { itemId: item.id, status: "not_claimed", current: getItem(db, item.id)?.status ?? null };
     }
     const extractionId = randomUUID();
-    db.prepare(
-      `INSERT INTO extractions (id, item_id, model, prompt_version, raw_json, latency_ms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(extractionId, item.id, extractor.model, extractor.promptVersion, result.raw, latencyMs, at);
+    insertExtraction(db, {
+      id: extractionId,
+      itemId: item.id,
+      model: extractor.model,
+      promptVersion: extractor.promptVersion,
+      rawJson: result.raw,
+      latencyMs,
+      createdAt: at,
+    });
     writeAudit(db, {
       itemId: item.id,
       actor,
@@ -161,20 +164,8 @@ export async function extractClaimed(item: ClaimedItem, deps: ExtractDeps): Prom
       latencyMs,
     };
   } catch (error) {
-    rollback(db);
+    rollbackQuietly(db);
     throw error;
-  }
-}
-
-/**
- * Roll back if a transaction is still open. A failing ROLLBACK is ignored so the caller's
- * original error is the one that propagates.
- */
-export function rollback(db: ExtractDb): void {
-  try {
-    if (db.isTransaction) db.exec("ROLLBACK");
-  } catch {
-    // Ignored on purpose: the original error is more useful than the rollback's.
   }
 }
 

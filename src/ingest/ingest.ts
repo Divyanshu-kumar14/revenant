@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { rollbackQuietly } from "@/db/client";
 import { findItemBySha, insertItem, writeAudit } from "@/db/queries";
 import { IngestError, checkSize, sniffUnsupported } from "./errors";
 import { contentHash } from "./hash";
@@ -97,7 +98,7 @@ export async function ingestFile(input: IngestInput, deps: IngestDeps): Promise<
     db.exec("COMMIT");
     return { itemId: item.id, status: "queued", sha256 };
   } catch (error) {
-    rollback(db);
+    rollbackQuietly(db);
     if (fileWritten) {
       const leftover = discard(absolutePath);
       if (leftover) {
@@ -109,18 +110,6 @@ export async function ingestFile(input: IngestInput, deps: IngestDeps): Promise<
       }
     }
     throw error;
-  }
-}
-
-/**
- * Roll back if a transaction is still open. A failing ROLLBACK (the connection may already
- * have rolled back) is ignored so the caller's original error is the one that propagates.
- */
-function rollback(db: IngestDb): void {
-  try {
-    if (db.isTransaction) db.exec("ROLLBACK");
-  } catch {
-    // Ignored on purpose: the original error is more useful than the rollback's.
   }
 }
 
