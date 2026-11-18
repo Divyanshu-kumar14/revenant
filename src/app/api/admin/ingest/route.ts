@@ -1,15 +1,12 @@
-import { join } from "node:path";
 import { z } from "zod";
 import { MIN_SECRET_LENGTH, Unauthorized, requireAdmin } from "@/auth/session";
-import { DataDirError, ensureDataDir, resolveDataDir } from "@/data-dir";
-import { migrate, openDb } from "@/db/client";
+import { DataDirError, resolveDataDir } from "@/data-dir";
+import { isBusy, serverDb, withBusyRetry } from "@/db/server";
 import { IngestError, MAX_UPLOAD_BYTES, type IngestErrorCode } from "@/ingest/errors";
-import { ingestFile, type IngestDb, type IngestResult } from "@/ingest/ingest";
+import { ingestFile, type IngestResult } from "@/ingest/ingest";
 
 /** Room for multipart boundaries, part headers and the caption on top of the file limit. */
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
-const BUSY_RETRY_MS = 50;
-const SQLITE_BUSY = 5;
 
 const uploadSchema = z.object({
   file: z.instanceof(File, { message: "Choose a photograph to upload." }),
@@ -83,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
   if (parsed.data.file.size > MAX_UPLOAD_BYTES) return tooLarge(parsed.data.file.size);
   const bytes = Buffer.from(await parsed.data.file.arrayBuffer());
   const dataDir = resolveDataDir();
-  const attempt = () => ingestFile({ fileName, bytes, caption, actor }, { db: database(dataDir), dataDir });
+  const attempt = () => ingestFile({ fileName, bytes, caption, actor }, { db: serverDb(dataDir), dataDir });
 
   try {
     return ok(await withBusyRetry(attempt));
@@ -104,44 +101,6 @@ export async function POST(request: Request): Promise<Response> {
     }
     return fail(500, "INTERNAL", "The upload could not be processed.");
   }
-}
-
-/** Run `attempt`; on SQLITE_BUSY wait 50 ms and run it exactly once more. */
-async function withBusyRetry<T>(attempt: () => Promise<T>): Promise<T> {
-  try {
-    return await attempt();
-  } catch (error) {
-    if (!isBusy(error)) throw error;
-    await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_MS));
-    return attempt();
-  }
-}
-
-function isBusy(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const errcode = (error as Error & { errcode?: unknown }).errcode;
-  // Extended result codes (e.g. SQLITE_BUSY_SNAPSHOT) carry the primary code in the low byte.
-  return typeof errcode === "number" && (errcode & 0xff) === SQLITE_BUSY;
-}
-
-const connections = new Map<string, IngestDb>();
-
-/** One migrated connection per data directory, opened on first use after the directory check. */
-function database(dataDir: string): IngestDb {
-  const path = join(dataDir, "revenant.db");
-  const existing = connections.get(path);
-  if (existing) return existing;
-  // Creates the data directory and uploads/ on a fresh container; throws if either is unwritable.
-  ensureDataDir(dataDir);
-  const db = openDb(path);
-  try {
-    migrate(db);
-  } catch (error) {
-    db.close();
-    throw error;
-  }
-  connections.set(path, db);
-  return db;
 }
 
 function ok(result: IngestResult): Response {
