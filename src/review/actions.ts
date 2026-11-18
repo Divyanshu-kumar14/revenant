@@ -18,8 +18,11 @@
  * INVARIANT: no `await` may appear inside the transaction. `serverDb` shares one connection
  * across requests, so yielding mid-transaction lets another request open a nested one.
  *
- * Validation here is shape only. Title and date-display presence and date ordering are task 6,
- * which owns their field-level messages.
+ * Validation is shape (zod) plus the record rules in `assertUsableRecord`. Title and date
+ * display are publication rules and apply to accept only, so edit can save a half-finished
+ * record. Date ordering applies to every write, because `records` carries the same CHECK: an
+ * incomplete record is allowed, an inconsistent one is not. The 1800 year floor is left to
+ * the schema on purpose.
  */
 import { z } from "zod";
 import { rollbackQuietly } from "@/db/client";
@@ -110,6 +113,7 @@ export function reviewItem(
       throw new ReviewValidationError({ _form: `${action === "accept" ? "Accept" : "Edit"} needs the record fields.` });
     }
     fields = parseFields(decision.fields);
+    assertUsableRecord(fields, { publishing: action === "accept" });
   }
   const at = clock().toISOString();
 
@@ -159,6 +163,25 @@ function parseFields(fields: unknown): ReviewFields {
     messages[issue.path.join(".") || "_form"] = issue.message;
   }
   throw new ReviewValidationError(messages);
+}
+
+/**
+ * Record rules, collected into one ReviewValidationError so a form can mark every bad field
+ * at once. Ordering always applies; title and date display only when publishing.
+ */
+export function assertUsableRecord(fields: ReviewFields, options: { publishing: boolean }): void {
+  const problems: Record<string, string> = {};
+  // ISO YYYY-MM-DD strings compare correctly as strings.
+  if (fields.dateStart !== null && fields.dateEnd !== null && fields.dateStart > fields.dateEnd) {
+    problems.dateEnd = "The end date is before the start date.";
+  }
+  if (options.publishing) {
+    if (fields.title === null || fields.title === "") problems.title = "Enter a title before publishing.";
+    if (fields.dateDisplay === null || fields.dateDisplay === "") {
+      problems.dateDisplay = 'Enter a date, or "undated" if the photograph has none.';
+    }
+  }
+  if (Object.keys(problems).length > 0) throw new ReviewValidationError(problems);
 }
 
 interface AuditEntities {

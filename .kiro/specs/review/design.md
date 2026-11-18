@@ -71,7 +71,7 @@ export interface ReviewOutcome {
 export function reviewItem(db: ReviewDb, decision: ReviewDecision, clock?: () => Date): ReviewOutcome;
 ```
 
-`reviewItem` validates with `zod`, checks the transition, enforces title and date display on accept, enforces `date_start <= date_end`, and writes audit before/after snapshots.
+`reviewItem` validates with `zod`, checks the transition, enforces title and date display on accept, enforces `date_start <= date_end`, and writes audit before/after snapshots. Title and date display are publication rules and apply to accept only; ordering applies to edit too, because `records` carries the same CHECK. Failures are collected into one `ReviewValidationError` keyed by field path, so a form can mark every bad field at once.
 
 ## Screen
 

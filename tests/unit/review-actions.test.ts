@@ -206,13 +206,14 @@ describe("reviewItem accept", () => {
     expect(countRows(db, "records")).toBe(0);
   });
 
-  // The only test that proves the transaction rolls back: the records CHECK fires after the
-  // status update has run. Task 6 turns this SQLite error into a field-level message.
-  it("rolls back the status update when the records CHECK rejects inverted dates", () => {
+  // The only test that proves the transaction rolls back. The 1800 floor is the schema's last
+  // line, deliberately not re-checked in the review layer, and the CHECK fires after the status
+  // update has run, so the rollback is what is being proven.
+  it("rolls back the status update when the records CHECK rejects a date before 1800", () => {
     const db = freshDb();
     seed(db, "i1");
 
-    expect(() => accept(db, "i1", { dateStart: "1950-01-01", dateEnd: "1940-01-01" })).toThrow(/CHECK/);
+    expect(() => accept(db, "i1", { dateStart: "1700-01-01" })).toThrow(/CHECK/);
 
     expect(getItem(db, "i1")?.status).toBe("needs_review");
     expect(countRows(db, "records")).toBe(0);
@@ -359,5 +360,95 @@ describe("illegal sources for edit, reject and reopen", () => {
     expect(snapshot(db, "i1")).toEqual(before);
     expect(getItem(db, "i1")?.status).toBe(from);
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("accept preconditions", () => {
+  function expectRejected(db: Db, run: () => unknown, keys: string[]) {
+    const error = caught(run);
+    expect(error).toMatchObject({ status: 400, code: "INVALID_FIELDS" });
+    expect(Object.keys(error.fields as Record<string, string>).sort()).toEqual([...keys].sort());
+    expect(getItem(db, "i1")?.status).toBe("needs_review");
+    expect([countRows(db, "records"), countRows(db, "audit_events")]).toEqual([0, 0]);
+    expect(db.isTransaction).toBe(false);
+  }
+
+  it("refuses a null title", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expectRejected(db, () => accept(db, "i1", { title: null }), ["title"]);
+  });
+
+  it("refuses a whitespace-only title, proving the trim", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expectRejected(db, () => accept(db, "i1", { title: "   " }), ["title"]);
+  });
+
+  it("refuses a null date display with a plain message", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    const error = caught(() => accept(db, "i1", { dateDisplay: null }));
+    expect((error.fields as Record<string, string>).dateDisplay).toBe(
+      'Enter a date, or "undated" if the photograph has none.',
+    );
+    expectRejected(db, () => accept(db, "i1", { dateDisplay: null }), ["dateDisplay"]);
+  });
+
+  it("reports every problem in one error", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expectRejected(db, () => accept(db, "i1", { title: null, dateDisplay: "" }), ["title", "dateDisplay"]);
+  });
+
+  it("refuses an inverted range on dateEnd and writes nothing", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expectRejected(db, () => accept(db, "i1", { dateStart: "1950-01-01", dateEnd: "1940-01-01" }), ["dateEnd"]);
+  });
+
+  it("refuses an unknown precision through the zod enum", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    const bad = { datePrecision: "fortnight" } as unknown as Partial<ReviewFields>;
+    expectRejected(db, () => accept(db, "i1", bad), ["datePrecision"]);
+  });
+
+  it("publishes when dateStart equals dateEnd", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expect(accept(db, "i1", { dateStart: "1938-05-01", dateEnd: "1938-05-01" })).toEqual({ status: "published" });
+    expect(recordRow(db, "i1")).toMatchObject({ date_start: "1938-05-01", date_end: "1938-05-01" });
+  });
+
+  it("publishes a one-sided range", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    expect(accept(db, "i1", { dateStart: "1938-01-01", dateEnd: null })).toEqual({ status: "published" });
+    expect(recordRow(db, "i1")).toMatchObject({ date_start: "1938-01-01", date_end: null });
+  });
+});
+
+describe("edit consistency rules", () => {
+  it("refuses an inverted range and keeps the saved title", () => {
+    const db = freshDb();
+    seed(db, "i1");
+    decide(db, "i1", "edit", { title: "Saved title" });
+
+    const error = caught(() => decide(db, "i1", "edit", { title: "Lost title", dateStart: "1950-01-01", dateEnd: "1940-01-01" }));
+
+    expect(error).toMatchObject({ status: 400, code: "INVALID_FIELDS" });
+    expect(Object.keys(error.fields as Record<string, string>)).toEqual(["dateEnd"]);
+    expect(recordRow(db, "i1")).toMatchObject({ title: "Saved title" });
+    expect(auditRows(db, "i1")).toHaveLength(1);
+  });
+
+  it("saves a record with no title and no date display", () => {
+    const db = freshDb();
+    seed(db, "i1");
+
+    expect(decide(db, "i1", "edit", { title: null, dateDisplay: null })).toEqual({ status: "needs_review" });
+
+    expect(recordRow(db, "i1")).toMatchObject({ title: null, date_display: null, published_at: null });
   });
 });
