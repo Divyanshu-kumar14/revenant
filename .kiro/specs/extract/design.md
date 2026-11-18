@@ -32,12 +32,12 @@ Why the modules sit where they do:
 
 Two constraints, fixed here:
 
-- *`tsx` loads the scripts, so `@/` stays everywhere.** `scripts/extract.ts` runs as `node --env-file-if-exists=.env.local --import tsx scripts/extract.ts`; the `tsx` loader resolves both the `@/` alias and extensionless relative imports, verified on this repo. No module changes its import style for the runner, `src/db/client.ts` keeps `@/data-dir`, and `src/db/queries.ts` keeps `./types`. `tsconfig.json` keeps `allowImportingTsExtensions` because `scripts/spike-accuracy.ts` still uses explicit `.ts` specifiers under plain `node`; that script is unchanged.
+- **`tsx` loads the scripts, so `@/` stays everywhere.** `scripts/extract.ts` runs as `node --env-file-if-exists=.env.local --import tsx scripts/extract.ts`; the `tsx` loader resolves both the `@/` alias and extensionless relative imports, verified on this repo. No module changes its import style for the runner, `src/db/client.ts` keeps `@/data-dir`, and `src/db/queries.ts` keeps `./types`. `tsconfig.json` keeps `allowImportingTsExtensions` because `scripts/spike-accuracy.ts` still uses explicit `.ts` specifiers under plain `node`; that script is unchanged.
 - **`MAX_BATCH = 5`.** Five extractions take roughly 75 seconds: successful items in the NIM base run (`eval-runs/spike-20261117T215437Z.json`, 15 items) took a median of 14.5 s each. Five also bounds the token spend one click can cause.
 
 ## Interfaces
 
-`deriveProposal` parses `raw_json` with the same fence-stripping the adapters use before validation. That helper is exported once from `src/extract/provider.ts` and used by the Gemini adapter, the NIM adapter and `deriveProposal`; it is not copied a third time.
+`deriveProposal` re-derives the date from `raw_json` using the same salvage the adapter applied. Today `extractJsonObject` is a private copy in both `src/extract/provider.ts` (line 281) and `src/extract/nim.ts` (line 307); task 6 exports the `provider.ts` copy, imports it in `nim.ts` and deletes the duplicate, so both adapters and `deriveProposal` share one parser. A third copy is what would let `raw_json` stop round-tripping.
 
 ```ts
 // src/extract/provider.ts — changed: extract() returns ExtractionResult instead of Extraction

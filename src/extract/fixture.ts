@@ -1,4 +1,4 @@
-import { extractionSchema, type ExtractInput, type Extraction, type ExtractionResult, type Extractor } from "./provider.ts";
+import { extractionSchema, type Extraction, type ExtractionResult, type Extractor } from "./provider.ts";
 
 /** The authored source of truth: the fixture's output text, parsed, never re-serialised. */
 const FIXTURE_RAW = `{
@@ -36,13 +36,15 @@ const FIXTURE_RAW = `{
 
 /**
  * Fixed, recognisably fake output for unit tests, browser tests and demos. It never reads the
- * image, never calls the network, and returns the same result for every input.
+ * image, never calls the network, and returns the same result for every input. `extract()`
+ * takes no parameter on purpose: the signature is shorter than the interface's, which the type
+ * accepts, and an unused parameter would only produce a lint warning.
  */
 export class FixtureExtractor implements Extractor {
   readonly model = "fixture";
   readonly promptVersion = "fixture";
 
-  async extract(_input: ExtractInput): Promise<ExtractionResult> {
+  async extract(): Promise<ExtractionResult> {
     const extraction: Extraction = extractionSchema.parse(JSON.parse(FIXTURE_RAW));
     return {
       extraction,
