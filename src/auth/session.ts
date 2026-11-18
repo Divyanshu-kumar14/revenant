@@ -3,12 +3,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 /**
  * Signed admin session cookie: `<base64url(JSON payload)>.<base64url(HMAC-SHA256(payload))>`.
  *
- * This is the smallest gate the admin routes need. Login, logout, cookie attributes and
- * rate limiting belong to review Task 1, which reuses this module.
+ * The payload carries the actor and the expiry. The login and logout routes set and clear the
+ * cookie through `sessionCookieHeader` and `clearSessionCookieHeader`.
  */
 
 export const SESSION_COOKIE = "revenant_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+export const SESSION_MAX_AGE_SECONDS = SESSION_TTL_MS / 1000;
 /** A shorter HMAC key is guessable offline from one captured cookie. */
 export const MIN_SECRET_LENGTH = 32;
 
@@ -56,6 +57,28 @@ export function requireAdmin(request: Request, secret: string, now: number = Dat
   const session = cookie === null ? null : verifySession(cookie, secret, now);
   if (!session) throw new Unauthorized();
   return session;
+}
+
+/** `Set-Cookie` value that stores `token` for 12 hours. Pass `secure` in production. */
+export function sessionCookieHeader(token: string, options: { secure?: boolean } = {}): string {
+  return cookieHeader(token, SESSION_MAX_AGE_SECONDS, options.secure ?? false);
+}
+
+/** `Set-Cookie` value that removes the session cookie. */
+export function clearSessionCookieHeader(options: { secure?: boolean } = {}): string {
+  return cookieHeader("", 0, options.secure ?? false);
+}
+
+/**
+ * One builder for setting and clearing, so Path, HttpOnly and SameSite cannot drift apart (a
+ * clear with a different Path would leave the real cookie in place). No Expires: the token
+ * carries its own expiry, so a browser that ignores Max-Age still holds a cookie the server
+ * rejects after 12 hours.
+ */
+function cookieHeader(value: string, maxAgeSeconds: number, secure: boolean): string {
+  const parts = [`${SESSION_COOKIE}=${value}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAgeSeconds}`];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
 }
 
 function sign(payload: string, secret: string): Buffer {

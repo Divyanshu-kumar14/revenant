@@ -1,6 +1,6 @@
 # Implementation Tasks — Review
 
-- [ ] 1. Implement session auth (`src/auth/session.ts`, `src/app/admin/login/page.tsx`): HMAC cookie, `timingSafeEqual`, 12 h expiry, logout, in-memory rate limit. Verify: tests for valid, tampered, expired and missing cookies; login E2E.
+- [x] 1. Implement session auth (`src/auth/session.ts`, `src/app/admin/login/page.tsx`): HMAC cookie, `timingSafeEqual`, 12 h expiry, logout, in-memory rate limit. Verify: tests for valid, tampered, expired and missing cookies; login E2E.
 - [ ] 2. Add `requireAdmin()` to the admin layout and to every `/api/admin/**` handler. Verify: unauthenticated requests redirect or return 401 and leak no item fields.
 - [ ] 3. Implement the transition table and `InvalidTransition` (`src/review/state.ts`). Verify: a table test covers every allowed pair and rejects the rest with `409`.
 - [ ] 4. Implement `reviewItem` accept (`src/review/actions.ts`): validate, upsert `records`, set `published_at` and `reviewed_by`, update status, write audit — one transaction. Verify: published record is returned by `listPublished()` and an audit row exists.

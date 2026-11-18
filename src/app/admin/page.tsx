@@ -18,6 +18,14 @@ export default function AdminUploadPage() {
           <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">
             admin
           </span>
+          <form method="post" action="/api/admin/logout" className="ml-auto">
+            <button
+              type="submit"
+              className="cursor-pointer border border-lamp/40 px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-lamp hover:border-lamp focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lamp"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">

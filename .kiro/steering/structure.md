@@ -13,7 +13,7 @@ src/app/                 Next.js App Router
   admin/                 login, ingest, review queue, review/[id], evals
   api/                   route handlers (ingest, batch, review, search, export, health)
 src/archive/             read models: items, search, citation, geo, export
-src/auth/                session cookie and requireAdmin()
+src/auth/                session cookie and requireAdmin(), password compare, login rate limiter
 src/components/          design-system primitives and shell
 src/db/                  client, schema.sql, migrations, typed queries, seed
 src/extract/             Extractor interface, prompt, provider adapter, fixture replay

@@ -45,7 +45,7 @@ Never claim a change works without running the narrowest relevant command and re
 
 ## Security and privacy
 
-- Public pages are unauthenticated. `/admin/**` and `/api/admin/**` require a signed, `httpOnly`, `sameSite=lax` cookie derived from `ADMIN_PASSWORD` and `SESSION_SECRET`. Compare secrets with `timingSafeEqual`.
+- Public pages are unauthenticated. `/admin/**` and `/api/admin/**` require an `httpOnly`, `sameSite=lax` cookie signed with `SESSION_SECRET` alone; `ADMIN_PASSWORD` is only compared at login. Compare secrets with `timingSafeEqual`.
 - Validate every request body with `zod` at the trust boundary. Reject oversized uploads by content length before buffering.
 - Do not log secrets, full request headers, or personal data from captions. Log item ids and error codes.
 - Fixture and demo material must be public-domain or institution-owned, with a rights line on every published item. Never infer a living person's identity.

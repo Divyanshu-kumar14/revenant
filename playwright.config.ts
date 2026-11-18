@@ -7,14 +7,17 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 // At least 32 characters, the floor src/auth/session.ts enforces.
 const SESSION_SECRET = "e2e-secret-not-real-padded-to-32-chars";
+// Without it the login route answers 500 CONFIG.
+const ADMIN_PASSWORD = "e2e-password-not-real";
 
 // Playwright loads this file in the runner and again in every worker. Workers inherit the
 // runner's environment, so the temp directory is created once and shared.
 const dataDir =
   process.env.REVENANT_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), "revenant-e2e-"));
 process.env.REVENANT_E2E_DATA_DIR = dataDir;
-// Specs read the secret from here to mint a session cookie.
+// Specs read the secret from here to mint a session cookie, and the password to sign in.
 process.env.SESSION_SECRET = SESSION_SECRET;
+process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -34,6 +37,6 @@ export default defineConfig({
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { SESSION_SECRET, REVENANT_DATA_DIR: dataDir, EXTRACTOR: "fixture" },
+    env: { SESSION_SECRET, ADMIN_PASSWORD, REVENANT_DATA_DIR: dataDir, EXTRACTOR: "fixture" },
   },
 });
