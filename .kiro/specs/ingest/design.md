@@ -60,6 +60,7 @@ The write happens inside the transaction on purpose: a row without a file is a l
 |---|---|---|
 | Body over limit | `413` `TOO_LARGE` | none |
 | Not decodable | `422` `UNDECODABLE` | none |
+| HEIC/HEIF bytes | `422` `UNSUPPORTED_FORMAT`, message explains how to export as JPEG | none |
 | Disk write fails | `500` `STORE_FAILED` | none (rolled back) |
 | Duplicate hash | `200` `duplicate` | unchanged |
 | Database locked | `503` `BUSY`, retry once after 50 ms | none |
