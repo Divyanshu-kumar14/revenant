@@ -17,7 +17,7 @@ src/app/                 Next.js App Router
 src/archive/             read models: items, search, citation, geo, export
 src/auth/                session cookie and requireAdmin(), password compare, login rate limiter
 src/components/          design-system primitives and shell
-src/db/                  client, schema.sql, migrations, typed queries, seed
+src/db/                  client, schema.ts, migrations, typed queries, seed
 src/extract/             Extractor interface, prompt, provider adapter, fixture replay
 src/ingest/              hashing, image normalisation, idempotent ingest
 src/jobs/                batch runner and job claiming

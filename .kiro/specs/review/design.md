@@ -9,12 +9,14 @@
 ```
 src/auth/session.ts            createSession, verifySession, requireAdmin
 src/auth/gate.ts               requireAdminPage — page-side gate, redirects to /admin/login
-src/review/actions.ts          reviewItem(db, decision, clock?) — accept today, the rest in task 5
+src/review/actions.ts          reviewItem(db, decision, clock?) — accept, edit, reject, reopen
 src/review/state.ts            allowed transitions
 src/app/admin/login/page.tsx   password form
 src/app/admin/(protected)/     layout.tsx gates the group; page.tsx is ingest + queue summary
-src/app/admin/review/[id]/page.tsx
-src/components/review/*        image panel, field list, confidence badge, shortcuts
+src/app/admin/(protected)/review/[id]/page.tsx     server component: item, record or proposal, queue position
+src/app/admin/(protected)/review/[id]/actions.ts   "use server" submitReview: re-normalises the date, looks up confidence, calls reviewItem
+src/app/api/admin/image/[id]/route.ts              admin-only stored photograph (image/jpeg, private cache)
+src/components/review/*        review form, confidence badge, shared form types
 src/app/api/admin/review/route.ts  thin JSON wrapper for tests and future clients
 ```
 
@@ -81,6 +83,7 @@ export function reviewItem(db: ReviewDb, decision: ReviewDecision, clock?: () =>
 - Editing turns values into inputs in place; the date display stays free text and is re-normalised on save by `normalizeDate`.
 - After accept: focus moves to the next item's `<h1>`, an `aria-live="polite"` region announces `"Published. 2 low-confidence fields: date, place."`, and the queue advances.
 - No animation is required for comprehension; all transitions respect `prefers-reduced-motion`.
+- Task 7 builds the screen only: the keyboard layer is task 8, and the post-accept announcement, focus move and queue advance are task 9.
 
 ## Auth
 

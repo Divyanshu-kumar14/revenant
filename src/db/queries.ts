@@ -134,6 +134,54 @@ export function insertExtraction(db: DatabaseSync, row: NewExtraction): void {
   ).run(row.id, row.itemId, row.model, row.promptVersion, row.rawJson, row.latencyMs, row.createdAt);
 }
 
+/** What the review screen needs from an item's newest extraction. */
+export interface LatestExtraction {
+  rawJson: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+}
+
+/** The item's newest extraction (ties broken by insertion order), or null when it has none. */
+export function getLatestExtraction(db: DatabaseSync, itemId: string): LatestExtraction | null {
+  const row = db
+    .prepare(
+      `SELECT raw_json, model, prompt_version, created_at FROM extractions
+       WHERE item_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+    )
+    .get(itemId) as
+    | { raw_json: string; model: string; prompt_version: string; created_at: string }
+    | undefined;
+  return row
+    ? { rawJson: row.raw_json, model: row.model, promptVersion: row.prompt_version, createdAt: row.created_at }
+    : null;
+}
+
+export interface ItemEntityLink {
+  type: EntityType;
+  name: string;
+  confidence: number | null;
+}
+
+/** The entities linked to an item, ordered by type then name. */
+export function listItemEntities(db: DatabaseSync, itemId: string): ItemEntityLink[] {
+  return db
+    .prepare(
+      `SELECT e.type AS type, e.name AS name, ie.confidence AS confidence
+       FROM item_entities ie JOIN entities e ON e.id = ie.entity_id
+       WHERE ie.item_id = ? ORDER BY e.type, e.name`,
+    )
+    .all(itemId) as unknown as ItemEntityLink[];
+}
+
+/** Ids of items awaiting review, oldest first. Drives "Item N of M" only. */
+export function listNeedsReviewIds(db: DatabaseSync): string[] {
+  const rows = db
+    .prepare("SELECT id FROM items WHERE status = 'needs_review' ORDER BY created_at, id")
+    .all() as Array<{ id: string }>;
+  return rows.map((row) => row.id);
+}
+
 /** Items still `extracting` with `updated_at` before `cutoff`, oldest first. Stale-claim recovery. */
 export function staleExtractingItems(
   db: DatabaseSync,

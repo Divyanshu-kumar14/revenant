@@ -1,4 +1,9 @@
--- Revenant schema. Idempotent: every statement is safe to run twice.
+/**
+ * Revenant schema. Idempotent: every statement is safe to run twice.
+ * Kept in TypeScript, not a .sql file, because Turbopack turns a `new URL("./schema.sql",
+ * import.meta.url)` into a hashed static asset in page bundles, where readFileSync cannot read it.
+ */
+export const SCHEMA_SQL = `-- Revenant schema. Idempotent: every statement is safe to run twice.
 -- Timestamps are ISO 8601 UTC text. Dates are YYYY-MM-DD text.
 
 CREATE TABLE IF NOT EXISTS items (
@@ -91,3 +96,4 @@ CREATE TABLE IF NOT EXISTS eval_runs (
   metrics_json TEXT NOT NULL,
   created_at   TEXT NOT NULL
 );
+`;
