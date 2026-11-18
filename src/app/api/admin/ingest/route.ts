@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { MIN_SECRET_LENGTH, Unauthorized, requireAdmin } from "@/auth/session";
-import { ensureDataDir, resolveDataDir } from "@/data-dir";
+import { DataDirError, ensureDataDir, resolveDataDir } from "@/data-dir";
 import { migrate, openDb } from "@/db/client";
 import { IngestError, MAX_UPLOAD_BYTES, type IngestErrorCode } from "@/ingest/errors";
 import { ingestFile, type IngestDb, type IngestResult } from "@/ingest/ingest";
@@ -96,7 +96,12 @@ export async function POST(request: Request): Promise<Response> {
       console.error("ingest route: BUSY after retry");
       return fail(503, "BUSY", "The archive is busy. Try the upload again in a moment.");
     }
-    console.error(`ingest route: INTERNAL ${error instanceof Error ? error.name : typeof error}`);
+    if (error instanceof DataDirError) {
+      // Built only from the configured path and the errno code, never from request input.
+      console.error(`ingest route: INTERNAL ${error.code} ${error.message}`);
+    } else {
+      console.error(`ingest route: INTERNAL ${error instanceof Error ? error.name : typeof error}`);
+    }
     return fail(500, "INTERNAL", "The upload could not be processed.");
   }
 }
