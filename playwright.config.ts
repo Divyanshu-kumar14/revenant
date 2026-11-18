@@ -34,6 +34,6 @@ export default defineConfig({
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { SESSION_SECRET, REVENANT_DATA_DIR: dataDir },
+    env: { SESSION_SECRET, REVENANT_DATA_DIR: dataDir, EXTRACTOR: "fixture" },
   },
 });
