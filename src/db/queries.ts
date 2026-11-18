@@ -132,3 +132,20 @@ export function insertExtraction(db: DatabaseSync, row: NewExtraction): void {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(row.id, row.itemId, row.model, row.promptVersion, row.rawJson, row.latencyMs, row.createdAt);
 }
+
+/** Items still `extracting` with `updated_at` before `cutoff`, oldest first. Stale-claim recovery. */
+export function staleExtractingItems(
+  db: DatabaseSync,
+  cutoff: string,
+): Array<{ id: string; updatedAt: string }> {
+  const rows = db
+    .prepare("SELECT id, updated_at FROM items WHERE status = 'extracting' AND updated_at < ? ORDER BY updated_at, id")
+    .all(cutoff) as Array<{ id: string; updated_at: string }>;
+  return rows.map((row) => ({ id: row.id, updatedAt: row.updated_at }));
+}
+
+/** How many items currently hold one status. Used for the batch summary's remaining count. */
+export function countItemsWithStatus(db: DatabaseSync, status: ItemStatus): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM items WHERE status = ?").get(status) as { n: number | bigint };
+  return Number(row.n);
+}

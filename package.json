@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "extract": "node --env-file-if-exists=.env.local --import tsx scripts/extract.ts",
     "eval": "node scripts/eval.ts",
     "spike": "node --env-file-if-exists=.env.local scripts/spike-accuracy.ts",
     "fixtures": "node --env-file-if-exists=.env.local scripts/fetch-fixtures.ts",
