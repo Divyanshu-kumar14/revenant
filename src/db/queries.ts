@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { ItemRow, ItemStatus } from "./types";
+import type { EntityType, ItemRow, ItemStatus, RecordRow } from "./types";
+import type { Precision } from "@/extract/provider";
 
 export interface NewItem {
   id: string;
@@ -93,8 +94,8 @@ export function nextQueuedItem(
   const row = (
     itemId === undefined
       ? db
-          .prepare("SELECT id, stored_path FROM items WHERE status = 'queued' ORDER BY created_at, id LIMIT 1")
-          .get()
+        .prepare("SELECT id, stored_path FROM items WHERE status = 'queued' ORDER BY created_at, id LIMIT 1")
+        .get()
       : db.prepare("SELECT id, stored_path FROM items WHERE id = ? AND status = 'queued'").get(itemId)
   ) as { id: string; stored_path: string } | undefined;
   return row ? { id: row.id, storedPath: row.stored_path } : null;
@@ -148,4 +149,92 @@ export function staleExtractingItems(
 export function countItemsWithStatus(db: DatabaseSync, status: ItemStatus): number {
   const row = db.prepare("SELECT COUNT(*) AS n FROM items WHERE status = ?").get(status) as { n: number | bigint };
   return Number(row.n);
+}
+
+export interface NewRecord {
+  itemId: string;
+  title: string | null;
+  description: string | null;
+  transcription: string | null;
+  dateStart: string | null;
+  dateEnd: string | null;
+  dateDisplay: string | null;
+  datePrecision: Precision;
+  confidenceJson: string | null;
+  reviewedBy: string | null;
+  publishedAt: string | null;
+}
+
+/**
+ * Insert or overwrite the one record for an item. Every column is replaced on conflict, so a
+ * re-accept after a reject overwrites rather than duplicating. The caller owns the transaction.
+ */
+export function upsertRecord(db: DatabaseSync, record: NewRecord): void {
+  db.prepare(
+    `INSERT INTO records (item_id, title, description, transcription, date_start, date_end, date_display,
+                          date_precision, confidence_json, reviewed_by, published_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(item_id) DO UPDATE SET
+       title = excluded.title,
+       description = excluded.description,
+       transcription = excluded.transcription,
+       date_start = excluded.date_start,
+       date_end = excluded.date_end,
+       date_display = excluded.date_display,
+       date_precision = excluded.date_precision,
+       confidence_json = excluded.confidence_json,
+       reviewed_by = excluded.reviewed_by,
+       published_at = excluded.published_at`,
+  ).run(
+    record.itemId,
+    record.title,
+    record.description,
+    record.transcription,
+    record.dateStart,
+    record.dateEnd,
+    record.dateDisplay,
+    record.datePrecision,
+    record.confidenceJson,
+    record.reviewedBy,
+    record.publishedAt,
+  );
+}
+
+export function getRecord(db: DatabaseSync, itemId: string): RecordRow | null {
+  const row = db.prepare("SELECT * FROM records WHERE item_id = ?").get(itemId);
+  return (row as unknown as RecordRow | undefined) ?? null;
+}
+
+/**
+ * The id of the entity with this `(type, nameKey)`, inserting it when new. First spelling wins:
+ * an existing entity keeps its `name`, so a name written differently on item 40 does not rename
+ * the entity item 2 already links to. The caller owns the transaction.
+ */
+export function upsertEntity(db: DatabaseSync, entity: { type: EntityType; name: string; nameKey: string }): string {
+  db.prepare(
+    "INSERT INTO entities (id, type, name, name_key) VALUES (?, ?, ?, ?) ON CONFLICT(type, name_key) DO NOTHING",
+  ).run(randomUUID(), entity.type, entity.name, entity.nameKey);
+  const row = db
+    .prepare("SELECT id FROM entities WHERE type = ? AND name_key = ?")
+    .get(entity.type, entity.nameKey) as { id: string } | undefined;
+  if (!row) throw new Error(`upsertEntity: ${entity.type} entity missing after insert`);
+  return row.id;
+}
+
+/**
+ * Link an item to an entity in one role. The `(item_id, entity_id, role)` primary key dedupes a
+ * name listed twice; the second link is ignored. The caller owns the transaction.
+ */
+export function linkItemEntity(
+  db: DatabaseSync,
+  link: { itemId: string; entityId: string; role: string; confidence: number | null },
+): void {
+  db.prepare(
+    "INSERT INTO item_entities (item_id, entity_id, role, confidence) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+  ).run(link.itemId, link.entityId, link.role, link.confidence);
+}
+
+/** Remove every entity link for one item; the entities themselves stay. The caller owns the transaction. */
+export function clearItemEntities(db: DatabaseSync, itemId: string): void {
+  db.prepare("DELETE FROM item_entities WHERE item_id = ?").run(itemId);
 }

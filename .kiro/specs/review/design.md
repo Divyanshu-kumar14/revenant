@@ -9,7 +9,7 @@
 ```
 src/auth/session.ts            createSession, verifySession, requireAdmin
 src/auth/gate.ts               requireAdminPage — page-side gate, redirects to /admin/login
-src/review/actions.ts          reviewItem(decision) — the only mutation entry point
+src/review/actions.ts          reviewItem(db, decision, clock?) — accept today, the rest in task 5
 src/review/state.ts            allowed transitions
 src/app/admin/login/page.tsx   password form
 src/app/admin/(protected)/     layout.tsx gates the group; page.tsx is ingest + queue summary
@@ -35,28 +35,38 @@ queued ──claim──> extracting ──ok──> needs_review ──accept�
 ## Interfaces
 
 ```ts
+// src/review/state.ts
 export type ReviewAction = "accept" | "edit" | "reject" | "reopen";
+
+// src/review/actions.ts
+export type ReviewFields = z.infer<typeof reviewFieldsSchema>;
+// {
+//   title: string | null;          // trimmed, max 500
+//   description: string | null;    // trimmed, max 20_000
+//   transcription: string | null;  // trimmed, max 50_000
+//   dateDisplay: string | null;    // trimmed, max 200
+//   dateStart: string | null;      // YYYY-MM-DD
+//   dateEnd: string | null;        // YYYY-MM-DD
+//   datePrecision: Precision;
+//   people: ExtractedEntity[];     // max 50, extractedEntitySchema from src/extract/provider.ts
+//   places: ExtractedEntity[];     // max 50
+//   subjects: ExtractedEntity[];   // max 20
+//   confidence: Record<string, number>; // [0, 1], default {}
+// }
 
 export interface ReviewDecision {
   itemId: string;
   action: ReviewAction;
   actor: string;
-  fields?: {
-    title: string;
-    description: string | null;
-    transcription: string | null;
-    dateDisplay: string;
-    dateStart: string | null;
-    dateEnd: string | null;
-    datePrecision: Precision;
-    people: ExtractedEntity[];
-    places: ExtractedEntity[];
-    subjects: ExtractedEntity[];
-  };
+  fields?: ReviewFields;
 }
 
-export async function reviewItem(decision: ReviewDecision): Promise<ReviewOutcome>;
-// ReviewOutcome = { status: ItemStatus; lowConfidenceFields: string[] }
+export interface ReviewOutcome {
+  status: ItemStatus;
+}
+
+// Synchronous: node:sqlite is synchronous. One clock instant per transaction.
+export function reviewItem(db: ReviewDb, decision: ReviewDecision, clock?: () => Date): ReviewOutcome;
 ```
 
 `reviewItem` validates with `zod`, checks the transition, enforces title and date display on accept, enforces `date_start <= date_end`, and writes audit before/after snapshots.
