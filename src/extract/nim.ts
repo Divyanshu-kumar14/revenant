@@ -266,8 +266,11 @@ const LIST_KEYS = ["people", "places", "subjects"] as const;
 
 /**
  * Re-validates a response whose only faults are a missing/invalid `date` or
- * null/non-array entity lists. Any other fault still throws, so content errors
- * are never hidden. A coerced date becomes unknown with confidence.date = 0.
+ * null/non-array entity lists. The response must still be recognisably an extraction: if it
+ * carries none of the schema's fields (a provider error body, say), it is refused rather than
+ * coerced into an empty result that review would read as "the model found nothing". Any other
+ * fault still throws, so content errors are never hidden. A coerced date becomes unknown with
+ * confidence.date = 0.
  *
  * Exported so the proposal derived from a stored raw response can repeat the exact
  * salvage the adapter applied; it needs no extractor, key or network.
@@ -276,6 +279,10 @@ export function coerceExtraction(text: string): Extraction {
   const parsed: unknown = JSON.parse(extractJsonObject(text));
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("response is not a JSON object");
+  }
+  const known = Object.keys(extractionSchema.shape);
+  if (!known.some((key) => key in parsed)) {
+    throw new Error("response contains no extraction fields");
   }
   const patched: Record<string, unknown> = { ...parsed };
 

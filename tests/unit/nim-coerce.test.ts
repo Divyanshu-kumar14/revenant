@@ -83,4 +83,35 @@ describe("NimExtractor date coercion", () => {
       code: "SCHEMA",
     });
   });
+
+  it("refuses an object with none of the extraction fields instead of coercing it to empty", async () => {
+    const { state, extractor } = stub({ error: "rate limited" });
+
+    await expect(extractor.extract(image)).rejects.toMatchObject({
+      name: ExtractionError.name,
+      code: "SCHEMA",
+    });
+    expect(state.calls).toBe(2);
+  });
+
+  it("still coerces a schema-shaped response whose fields are all empty", async () => {
+    const { extractor } = stub({
+      transcription: null,
+      title: null,
+      description: null,
+      date: null,
+      people: [],
+      places: [],
+      subjects: [],
+      confidence: {},
+    });
+
+    const { extraction: result, coerced } = await extractor.extract(image);
+
+    expect(coerced).toBe(true);
+    expect(result.title).toBeNull();
+    expect(result.people).toEqual([]);
+    expect(result.date.precision).toBe("unknown");
+    expect(result.confidence.date).toBe(0);
+  });
 });

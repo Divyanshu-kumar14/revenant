@@ -121,3 +121,12 @@ describe("GeminiExtractor does not salvage", () => {
     await expect(extractor.extract(input)).rejects.toMatchObject({ name: "ExtractionError", code: "SCHEMA" });
   });
 });
+
+describe("NimExtractor refuses a provider error body", () => {
+  it("throws SCHEMA after the repair call instead of coercing it into an empty extraction", async () => {
+    const { make } = adapters[1];
+    const { state, extractor } = make(['{"error":"rate limited"}']);
+    await expect(extractor.extract(input)).rejects.toMatchObject({ name: "ExtractionError", code: "SCHEMA" });
+    expect(state.calls).toBe(2);
+  });
+});
